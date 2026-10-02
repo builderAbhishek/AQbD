@@ -1,0 +1,16 @@
+fastapi
+uvicorn
+pydantic
+sqlalchemy
+alembic
+pandas
+numpy
+scipy
+statsmodels
+pyDOE3
+openpyxl
+xlsxwriter
+reportlab
+pytest
+python-multipart
+httpx
