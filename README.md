@@ -39,8 +39,8 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - Docker Desktop
 
 ## Quick Start with Docker
-`ash
-git clone <repository>
+`Bash
+git clone https://github.com/builderAbhishek/AQbD.git
 cd AQbD
 cp .env.example .env
 docker compose up --build -d
@@ -51,7 +51,7 @@ docker compose up --build -d
 - **Backend API Docs**: http://localhost:8000/docs
 
 ## Project Structure
-- ackend/: FastAPI application, statistical engines, SQLite database.
+- Backend/: FastAPI application, statistical engines, SQLite database.
 - rontend/: React single-page application.
 - docs/: Extensive documentation (Docker, Setup, Status, etc).
 
