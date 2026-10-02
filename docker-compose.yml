@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   backend:
     build:
@@ -9,9 +7,17 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
+    env_file:
+      - .env
     environment:
-      - DATABASE_URL=sqlite:///./aqbd.db
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///./aqbd.db}
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD-SHELL", "python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
   frontend:
     build:
@@ -22,8 +28,13 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
+    env_file:
+      - .env
     environment:
-      - VITE_API_URL=http://localhost:8000
+      - VITE_API_URL=${VITE_API_URL:-http://localhost:8000}
       - CHOKIDAR_USEPOLLING=true
       - WATCHPACK_POLLING=true
     command: npm run dev -- --host 0.0.0.0 --port 3000
+    depends_on:
+      backend:
+        condition: service_healthy

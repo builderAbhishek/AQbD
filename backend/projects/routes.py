@@ -42,12 +42,30 @@ def update_project(project_id: int, project: schemas.ProjectUpdate, db: Session 
     db.refresh(db_project)
     return db_project
 
+import os
+
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_project(project_id: int, db: Session = Depends(get_db)):
     db_project = db.query(models.Project).filter(models.Project.id == project_id).first()
     if db_project is None:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    db.delete(db_project)
-    db.commit()
+    # Collect file paths to delete
+    report_files = [report.file_path for report in db_project.reports if report.file_path]
+    
+    try:
+        db.delete(db_project)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Database deletion failed")
+    
+    # Cleanup files
+    for filepath in report_files:
+        try:
+            if os.path.exists(filepath):
+                os.remove(filepath)
+        except OSError:
+            pass # Best effort cleanup
+            
     return None

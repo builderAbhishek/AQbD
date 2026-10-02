@@ -151,10 +151,10 @@ export default function Experiments() {
     };
   };
 
-  // Synthetic Test Data Generator helper for rapid testing and AQbD workflow demonstration
+  // Synthetic Example Data Generator helper for rapid testing and AQbD workflow demonstration
   const populateSyntheticData = async () => {
     if (!runs || !responses) return;
-    setSaveStatus('Generating scientifically coherent HPLC test data...');
+    setSaveStatus('Generating scientifically coherent HPLC example data...');
     try {
       for (let i = 0; i < runs.length; i++) {
         const r = runs[i];
@@ -220,12 +220,12 @@ export default function Experiments() {
           body: JSON.stringify({ response_values: syntheticMap })
         });
       }
-      setSaveStatus('Scientific HPLC test data generated and saved! You can now proceed directly to Statistical Analysis.');
+      setSaveStatus('Scientific HPLC example data generated and saved! You can now proceed directly to Statistical Analysis.');
       queryClient.invalidateQueries({ queryKey: ['doe_runs', activeDesign?.id] });
       queryClient.invalidateQueries({ queryKey: ['analyses', projectId] });
       queryClient.invalidateQueries({ queryKey: ['optimizations', projectId] });
     } catch (e: any) {
-      setError(`Failed to populate synthetic test data: ${e.message}`);
+      setError(`Failed to populate synthetic example data: ${e.message}`);
     }
   };
 
@@ -306,10 +306,10 @@ export default function Experiments() {
         <div className="flex flex-wrap gap-2.5">
           <button
             onClick={populateSyntheticData}
-            title="Populate realistic test data to test the downstream analysis and optimization without manual typing"
+            title="Populate realistic example data to demonstrate the downstream analysis and optimization without manual typing"
             className="text-xs bg-purple-50 text-purple-700 border border-purple-300 hover:bg-purple-100 px-3.5 py-2 rounded font-medium transition"
           >
-            ⚡ Generate Test Data (E2E Test)
+            ⚡ Populate Example Data
           </button>
           <button
             onClick={saveAllRuns}

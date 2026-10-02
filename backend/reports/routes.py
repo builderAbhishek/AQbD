@@ -116,3 +116,26 @@ def download_report(report_id: int, db: Session = Depends(get_db)):
         media_type="application/pdf",
         filename=os.path.basename(report.file_path)
     )
+
+@router.delete("/{report_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_report(report_id: int, db: Session = Depends(get_db)):
+    db_report = db.query(models.Report).filter(models.Report.id == report_id).first()
+    if db_report is None:
+        raise HTTPException(status_code=404, detail="Report not found")
+    
+    file_path = db_report.file_path
+    
+    try:
+        db.delete(db_report)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Database deletion failed")
+        
+    try:
+        if file_path and os.path.exists(file_path):
+            os.remove(file_path)
+    except OSError:
+        pass # Best effort
+        
+    return None

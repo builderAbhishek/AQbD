@@ -1,0 +1,12 @@
+node_modules/
+dist/
+__pycache__/
+*.pyc
+venv/
+.env
+aqbd.db
+test.db
+.pytest_cache/
+backend/generated_reports/*.pdf
+!backend/generated_reports/.gitkeep
+.DS_Store

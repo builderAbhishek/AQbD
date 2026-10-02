@@ -1,0 +1,9 @@
+__pycache__
+*.pyc
+*.pyo
+venv/
+.env
+aqbd.db
+test.db
+.pytest_cache/
+generated_reports/*.pdf

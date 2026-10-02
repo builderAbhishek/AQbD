@@ -139,6 +139,26 @@ export default function Reports() {
     }
   });
 
+  const [reportToDelete, setReportToDelete] = useState<any>(null);
+
+  const deleteReport = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`${API_URL}/api/v1/reports/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to delete report');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reports', projectId] });
+      setReportToDelete(null);
+      setSuccessMessage('Report deleted successfully.');
+      setTimeout(() => setSuccessMessage(null), 3000);
+    },
+    onError: (err: any) => {
+      setError(err.message || 'Deletion failed.');
+      setReportToDelete(null);
+      setTimeout(() => setError(null), 3000);
+    }
+  });
+
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-12">
       {/* Header */}
@@ -338,7 +358,7 @@ export default function Reports() {
                           ✓ Ready
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-4 py-3 text-right flex justify-end gap-2">
                         <a
                           href={downloadUrl}
                           target="_blank"
@@ -347,6 +367,12 @@ export default function Reports() {
                         >
                           <span>⬇️ Download PDF</span>
                         </a>
+                        <button
+                          onClick={() => setReportToDelete(rep)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-700 hover:bg-red-100 font-semibold text-xs rounded-lg transition"
+                        >
+                          Delete
+                        </button>
                       </td>
                     </tr>
                   );
@@ -374,6 +400,34 @@ export default function Reports() {
           <span>⌂</span>
         </Link>
       </div>
+      
+      {reportToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded shadow-lg max-w-md w-full">
+            <h3 className="text-xl font-bold text-red-600 mb-4">DELETE REPORT</h3>
+            <p className="font-semibold mb-2">This action cannot be undone.</p>
+            <p className="text-gray-600 mb-6">
+              The generated PDF dossier and its associated record will be permanently deleted.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button 
+                className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 transition"
+                onClick={() => setReportToDelete(null)}
+                disabled={deleteReport.isPending}
+              >
+                Cancel
+              </button>
+              <button 
+                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition disabled:opacity-50"
+                onClick={() => deleteReport.mutate(reportToDelete.id)}
+                disabled={deleteReport.isPending}
+              >
+                {deleteReport.isPending ? 'Deleting...' : 'Delete Permanently'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
