@@ -39,12 +39,13 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - Docker Desktop
 
 ## Quick Start with Docker
-`Bash
+
+```bash
 git clone https://github.com/builderAbhishek/AQbD.git
 cd AQbD
 cp .env.example .env
 docker compose up --build -d
-`
+```
 
 ## Accessing the Application
 - **Frontend**: http://localhost:3000
