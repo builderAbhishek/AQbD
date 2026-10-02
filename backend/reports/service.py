@@ -33,7 +33,7 @@ class ReportGenerator:
         # Metadata Block
         meta_table_data = [
             ["Project Code:", project_data.get('project_code', 'N/A'), "Date / Time:", datetime.now().strftime('%Y-%m-%d %H:%M:%S')],
-            ["Project Name:", project_data.get('project_name', 'N/A'), "Software:", "AQbD Studio V1 (ICH Q14 Enhanced Approach)"]
+            ["Project Name:", project_data.get('project_name', 'N/A'), "Software:", "AQbD Studio V1 (ICH-Aligned)"]
         ]
         t_meta = Table(meta_table_data, colWidths=[90, 180, 80, 190])
         t_meta.setStyle(TableStyle([
@@ -178,57 +178,125 @@ class ReportGenerator:
 
         # 6. DOE Summary
         Story.append(Paragraph("6. Design of Experiments (DOE) Execution", h1_style))
-        doe_list = project_data.get('does', [])
-        if doe_list:
-            for d in doe_list:
-                Story.append(Paragraph(f"Design Type: <b>{d.get('design_type')}</b> | Runs: <b>{d.get('run_count')}</b> | Random Seed: <b>{d.get('seed') or 'None'}</b>", norm_style))
+        active_doe = project_data.get('active_doe')
+        if active_doe:
+            Story.append(Paragraph(f"Active Design (ID {active_doe.get('id')}): <b>{active_doe.get('design_type')}</b> | Runs: <b>{active_doe.get('run_count')}</b> | Random Seed: <b>{active_doe.get('seed') or 'None'}</b>", norm_style))
         else:
-            Story.append(Paragraph("No DOE designs recorded.", norm_style))
+            Story.append(Paragraph("No active DOE design recorded.", norm_style))
         Story.append(Spacer(1, 12))
 
         # 7. Statistical Modeling & Optimization
         Story.append(Paragraph("7. Statistical Modeling & Optimization", h1_style))
-        analysis_list = project_data.get('analyses', [])
-        if analysis_list:
-            for a in analysis_list:
-                m = a.get("metrics", {})
-                r2 = f"{m.get('R2', 0):.4f}" if m.get('R2') is not None else "N/A"
-                adj_r2 = f"{m.get('Adjusted_R2', 0):.4f}" if m.get('Adjusted_R2') is not None else "N/A"
-                pred_r2 = f"{m.get('Predicted_R2', 0):.4f}" if m.get('Predicted_R2') is not None else "N/A"
-                Story.append(Paragraph(f"Model: <b>{a.get('model_type')}</b> | R²: <b>{r2}</b> | Adj R²: <b>{adj_r2}</b> | Pred R²: <b>{pred_r2}</b>", norm_style))
         
-        opt_list = project_data.get('optimizations', [])
-        if opt_list:
+        hist_count = project_data.get('historical_model_count', 0)
+        if hist_count > 0:
+            Story.append(Paragraph(f"<i>Note: {hist_count} historical/superseded model fits are archived in the project but excluded from this active summary.</i>", small_style))
             Story.append(Spacer(1, 6))
-            Story.append(Paragraph("Multi-Response Optimal Solution (Desirability):", h2_style))
-            for o in opt_list:
-                cands = o.get("candidates", [])
-                if cands:
-                    best = cands[0]
-                    od = best.get("overall_desirability")
-                    od_str = f"{od:.4f}" if isinstance(od, (int, float)) else "N/A"
-                    Story.append(Paragraph(f"Overall Desirability: <b>{od_str}</b>", norm_style))
-                    fac_str = ", ".join([f"{k} = {v:.3f}" if isinstance(v, (int, float)) else f"{k}={v}" for k, v in best.get("factors", {}).items()])
-                    Story.append(Paragraph(f"Factor Settings: {fac_str}", norm_style))
+
+        active_analyses = project_data.get('active_analyses', [])
+        if active_analyses:
+            Story.append(Paragraph("<b>Active Response Models:</b>", norm_style))
+            for a in active_analyses:
+                m = a.get("metrics", {})
+                r2_val = m.get('r_squared')
+                adj_val = m.get('adj_r_squared')
+                pred_val = m.get('pred_r_squared')
+                
+                r2 = f"{r2_val*100:.1f}%" if r2_val is not None else "N/A"
+                adj_r2 = f"{adj_val*100:.1f}%" if adj_val is not None else "N/A"
+                pred_r2 = f"{pred_val*100:.1f}%" if pred_val is not None else "N/A"
+                Story.append(Paragraph(f"• ID #{a.get('id')} - Response ID {a.get('response_id')} ({a.get('model_type')}): R² = <b>{r2}</b> | Adj R² = <b>{adj_r2}</b> | Pred R² = <b>{pred_r2}</b>", norm_style))
+        else:
+            Story.append(Paragraph("No active models found.", norm_style))
+        
+        active_opt = project_data.get('active_optimization')
+        if active_opt:
+            Story.append(Spacer(1, 6))
+            Story.append(Paragraph(f"<b>Active Multi-Response Optimal Solution (Run #{active_opt.get('id')}):</b>", norm_style))
+            cands = active_opt.get("candidates", [])
+            if cands:
+                best = cands[0]
+                od = best.get("overall_desirability")
+                od_str = f"{od:.4f}" if isinstance(od, (int, float)) else "N/A"
+                Story.append(Paragraph(f"Overall Desirability (D): <b>{od_str}</b>", norm_style))
+                fac_str = ", ".join([f"{k} = {v:.3f}" if isinstance(v, (int, float)) else f"{k}={v}" for k, v in best.get("factors", {}).items()])
+                Story.append(Paragraph(f"Optimal Setpoint: {fac_str}", norm_style))
         Story.append(Spacer(1, 12))
 
-        # 8. Confirmation Runs
+        # 8. Design Space (PAR)
+        Story.append(Paragraph("8. Design Space & Proven Acceptable Range (PAR)", h1_style))
+        active_ds = project_data.get('active_design_space')
+        if active_ds:
+            sd = active_ds.get('space_data', {})
+            total_points = sd.get('total_3d_points', sd.get('total_points', 0))
+            acceptable = sd.get('acceptable_3d_points', sd.get('acceptable_points', 0))
+            unacceptable = sd.get('unacceptable_3d_points', sd.get('unacceptable_points', 0))
+            feasibility = sd.get('feasible_3d_percentage', (acceptable / total_points * 100) if total_points > 0 else 0)
+            
+            Story.append(Paragraph(f"<b>Full 3D Design Space Analysis (Run #{active_ds.get('id')}):</b>", norm_style))
+            Story.append(Paragraph(f"• Grid Vertices Evaluated: {total_points}", norm_style))
+            Story.append(Paragraph(f"• Feasible/Acceptable Region: {acceptable} points ({feasibility:.1f}%)", norm_style))
+            Story.append(Paragraph(f"• Unacceptable Region: {unacceptable} points", norm_style))
+            Story.append(Paragraph(f"• Extrapolation Allowed: Zero", norm_style))
+            
+            Story.append(Spacer(1, 6))
+            Story.append(Paragraph("<b>Projected Feasible Spans (Envelope):</b>", norm_style))
+            spans = sd.get('projected_ranges_3d', sd.get('projected_ranges', {}))
+            for factor_code, bounds in spans.items():
+                low = bounds.get('min')
+                high = bounds.get('max')
+                l_str = f"{low:.2f}" if low is not None else "N/A"
+                h_str = f"{high:.2f}" if high is not None else "N/A"
+                Story.append(Paragraph(f"• {factor_code} = {l_str} – {h_str}", norm_style))
+                
+            Story.append(Spacer(1, 4))
+            Story.append(Paragraph("<i>Note: The projected spans represent the outer envelope of feasibility across the evaluated dimensions. They do not constitute a fully uncoupled Cartesian operating box; some combinations near the edges may still fail constraints depending on interactions. (Note: 2D cross-sectional slices visualized in the software are distinct from this full 3D volume analysis).</i>", small_style))
+        else:
+            Story.append(Paragraph("No Design Space analysis computed.", norm_style))
+        Story.append(Spacer(1, 12))
+
+        # 9. Confirmation Validation
         conf_list = project_data.get('confirmations', [])
         if conf_list:
-            Story.append(Paragraph("8. Experimental Confirmation", h1_style))
+            Story.append(Paragraph("9. Confirmation Validation", h1_style))
             for c in conf_list:
-                Story.append(Paragraph(f"Predicted: {c.get('predicted')} | Actual: {c.get('actual')} | Difference: {c.get('diffs')}", norm_style))
+                data_src = c.get('data_source', 'SIMULATED')
+                is_exp = data_src == 'EXPERIMENTAL'
+                status_text = "✓ Experimental Verification" if is_exp else "⚙ Software Simulation Check"
+                
+                Story.append(Paragraph(f"Confirmation Run ID: CR-{c.get('id')} — <b>{status_text}</b>", h2_style))
+                
+                # Format predictions vs actuals
+                preds = c.get('predicted', {})
+                acts = c.get('actual', {})
+                diffs = c.get('diffs', {})
+                
+                for k in preds.keys():
+                    p_val = preds.get(k)
+                    a_val = acts.get(k)
+                    d_val = diffs.get(k)
+                    p_str = f"{p_val:.3f}" if isinstance(p_val, (int, float)) else "N/A"
+                    a_str = f"{a_val:.3f}" if isinstance(a_val, (int, float)) else "N/A"
+                    d_str = f"{d_val:.3f}" if isinstance(d_val, (int, float)) else "N/A"
+                    
+                    Story.append(Paragraph(f"• {k}: Predicted = {p_str} | {'Observed' if is_exp else 'Simulated'} = {a_str} | Diff = {d_str}", norm_style))
+                
+                if not is_exp:
+                    Story.append(Paragraph("<i>Verdict: Software Verification Passed (Data Source: SIMULATED)</i>", small_style))
+                
+                Story.append(Spacer(1, 8))
             Story.append(Spacer(1, 12))
 
-        # 9. Conclusion
-        Story.append(Paragraph("9. Conclusion", h1_style))
+        # 10. Conclusion
+        Story.append(Paragraph("10. Conclusion", h1_style))
         Story.append(Paragraph(
             "The analytical method was developed and evaluated using systematic AQbD principles. "
-            "The mathematical models, design space boundaries, and confirmation verification prove that the procedure operates robustly within its acceptable ranges.",
+            "The workflow produced model-based predictions, multi-response optimization results, and a computed multidimensional design space. "
+            "Simulated confirmation records verify the software calculation workflow only and do not constitute empirical laboratory confirmation.",
             norm_style
         ))
         Story.append(Spacer(1, 14))
-        Story.append(Paragraph("Generated automatically by AQbD Studio V1. Compliant with ICH Q14 Enhanced Lifecycle Guidelines.", styles['Italic']))
+        Story.append(Paragraph("Generated automatically by AQbD Studio V1. Aligned with ICH Q8/Q9/Q14 Enhanced Lifecycle Guidelines.", styles['Italic']))
         
         doc.build(Story)
         return filepath

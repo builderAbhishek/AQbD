@@ -116,8 +116,47 @@ def calculate_design_space(project_id: int, request: schemas.DesignSpaceCalculat
         factors=factors,
         models_data=models_data,
         constraints=constraints,
-        resolution=grid_res
+        resolution=grid_res,
+        resolution_3d=request.grid_resolution_3d or 20,
+        slice_axis_x=request.slice_axis_x,
+        slice_axis_y=request.slice_axis_y,
+        fixed_factors=request.fixed_factors
     )
+
+    # Check membership of latest optimization setpoint in true 3D space
+    from optimization import models as opt_models
+    latest_opt = db.query(opt_models.OptimizationRun).filter(
+        opt_models.OptimizationRun.project_id == project_id
+    ).order_by(opt_models.OptimizationRun.id.desc()).first()
+
+    opt_check = None
+    if latest_opt and latest_opt.candidates and len(latest_opt.candidates) > 0:
+        opt_factors = latest_opt.candidates[0].get("factors")
+        if opt_factors:
+            opt_check = DesignSpaceEngine.verify_point_membership(
+                factors=factors,
+                models_data=models_data,
+                factor_values=opt_factors,
+                threshold=0.05
+            )
+            opt_check["setpoints"] = opt_factors
+            opt_check["optimization_id"] = latest_opt.id
+            opt_check["overall_desirability"] = latest_opt.candidates[0].get("overall_desirability")
+
+            # Check whether optimal setpoint is on the active 2D slice plane
+            fixed_factors = space_output.get("slice_data", {}).get("fixed_factors", {})
+            is_on_slice = True
+            slice_diffs = {}
+            for code, fixed_val in fixed_factors.items():
+                if code in opt_factors:
+                    diff = abs(opt_factors[code] - fixed_val)
+                    slice_diffs[code] = diff
+                    if diff > 0.25:
+                        is_on_slice = False
+            opt_check["is_on_active_slice"] = is_on_slice
+            opt_check["slice_diffs"] = slice_diffs
+
+    space_output["optimization_point_check"] = opt_check
 
     db_space = models.DesignSpace(
         project_id=project_id,

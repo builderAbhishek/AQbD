@@ -158,7 +158,7 @@ export default function Reports() {
             <h1 className="text-2xl font-bold text-gray-900">Regulatory AQbD PDF Dossier</h1>
           </div>
           <p className="text-sm text-gray-500 mt-1">
-            Generate and download formal ICH Q8/Q9/Q14 compliant analytical method development summary reports.
+            Generate and download formal ICH Q8/Q9/Q14-aligned analytical method development dossiers.
           </p>
         </div>
 
@@ -269,7 +269,20 @@ export default function Reports() {
                 {analyses.length > 0 ? '✓' : '—'}
               </span>
             </div>
-            <p className="text-base font-bold text-gray-800 mt-1">{analyses.length} fitted</p>
+            <p className="text-base font-bold text-gray-800 mt-1">
+              {(() => {
+                // Determine active vs historical models (1 active model per response max)
+                const activeResponseIds = new Set(analyses.filter((a: any) => !a.is_stale).map((a: any) => a.response_id));
+                const activeCount = activeResponseIds.size;
+                const historicalCount = analyses.length - activeCount;
+                return (
+                  <span className="flex flex-col">
+                    <span>{activeCount} current models</span>
+                    <span className="text-xs font-normal text-gray-500">{historicalCount} historical fits</span>
+                  </span>
+                );
+              })()}
+            </p>
           </div>
         </div>
       </div>

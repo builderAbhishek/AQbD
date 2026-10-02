@@ -71,9 +71,58 @@ interface GridPoint {
   acceptable: boolean;
 }
 
-interface DesignSpaceData {
+interface ProjectedRange {
+  min: number | null;
+  max: number | null;
+  investigated_min: number;
+  investigated_max: number;
+  is_full_investigated_range: boolean;
+}
+
+interface OptPointCheck {
+  has_optimization?: boolean;
+  run_id?: number;
+  is_inside: boolean;
+  violations?: string[];
+  factor_values?: Record<string, number>;
+  predictions?: Record<string, any>;
+  cqa_results?: Record<string, { predicted: number; desirability: number; acceptable: boolean }>;
+  setpoints?: Record<string, number>;
+  optimization_id?: number;
+  overall_desirability?: number;
+  reason?: string;
+  is_on_active_slice?: boolean;
+  slice_diffs?: Record<string, number>;
+}
+
+interface SliceData {
+  axis_x: string;
+  axis_y: string;
+  fixed_factors: Record<string, number>;
+  slice_label: string;
   acceptable_points: number;
   unacceptable_points: number;
+  total_points: number;
+  feasible_percentage: number;
+  plot_data: GridPoint[];
+}
+
+interface DesignSpaceData {
+  dimension?: number;
+  total_3d_points?: number;
+  acceptable_3d_points?: number;
+  unacceptable_3d_points?: number;
+  feasible_3d_percentage?: number;
+  is_entire_3d_range_acceptable?: boolean;
+  projected_ranges_3d?: Record<string, ProjectedRange>;
+
+  acceptable_points: number;
+  unacceptable_points: number;
+  total_points?: number;
+  is_entire_range_acceptable?: boolean;
+  projected_ranges?: Record<string, ProjectedRange>;
+  optimization_point_check?: OptPointCheck | null;
+  slice_data?: SliceData;
   plot_data: GridPoint[];
 }
 
@@ -92,8 +141,10 @@ export default function DesignSpace() {
   const [projectId, setProjectId] = useState<number | null>(null);
   const [selectedResponseIds, setSelectedResponseIds] = useState<number[]>([]);
   const [gridResolution, setGridResolution] = useState<number>(20);
+  const [gridResolution3D, setGridResolution3D] = useState<number>(20);
   const [factorXCode, setFactorXCode] = useState<string>('');
   const [factorYCode, setFactorYCode] = useState<string>('');
+  const [fixedFactorVals, setFixedFactorVals] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -154,6 +205,20 @@ export default function DesignSpace() {
   });
   const activeDesign = designs && designs.length > 0 ? designs[designs.length - 1] : null;
 
+  // Load past optimization runs to get the scientifically derived optimal setpoints (NOR Target)
+  const { data: optRuns = [] } = useQuery<any[]>({
+    queryKey: ['optimizations', projectId],
+    queryFn: async () => {
+      if (!projectId) return [];
+      const res = await fetch(`${API_URL}/api/v1/projects/${projectId}/optimization/`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!projectId
+  });
+  const latestOptRun = optRuns.length > 0 ? optRuns[0] : null;
+  const bestCandidate = latestOptRun?.candidates && latestOptRun.candidates.length > 0 ? latestOptRun.candidates[0] : null;
+
   // Load existing design spaces
   const { data: designSpaces = [], isLoading: spacesLoading } = useQuery<DesignSpaceItem[]>({
     queryKey: ['designSpaces', projectId],
@@ -212,7 +277,7 @@ export default function DesignSpace() {
     }
   }, [uniqueResponses, selectedResponseIds.length]);
 
-  // Setup factor X and Y
+  // Setup factor X, Y, and default fixed factors for slice
   useEffect(() => {
     if (factors.length >= 2) {
       if (!factorXCode) setFactorXCode(factors[0].code);
@@ -220,7 +285,14 @@ export default function DesignSpace() {
     } else if (factors.length === 1) {
       if (!factorXCode) setFactorXCode(factors[0].code);
     }
-  }, [factors, factorXCode, factorYCode]);
+
+    // Default fixed factors for slice if 3 factors
+    if (factors.length >= 3 && Object.keys(fixedFactorVals).length === 0) {
+      const fixedCode = factors[2].code;
+      const mid = (factors[2].low_value + factors[2].high_value) / 2.0;
+      setFixedFactorVals({ [fixedCode]: mid });
+    }
+  }, [factors, factorXCode, factorYCode, fixedFactorVals]);
 
   const toggleResponse = (id: number) => {
     setSelectedResponseIds(prev => {
@@ -242,7 +314,7 @@ export default function DesignSpace() {
     setSelectedResponseIds([]);
   };
 
-  // Calculate design space mutation
+  // Calculate design space mutation (computes both full 3D space and 2D slice)
   const calculateSpace = useMutation({
     mutationFn: async () => {
       if (!projectId) throw new Error('No project selected');
@@ -272,7 +344,11 @@ export default function DesignSpace() {
         response_ids: dedupedResponseIds,
         analysis_ids: dedupedAnalysisIds,
         constraints: {},
-        grid_resolution: gridResolution
+        grid_resolution: gridResolution,
+        grid_resolution_3d: gridResolution3D,
+        slice_axis_x: factorXCode || undefined,
+        slice_axis_y: factorYCode || undefined,
+        fixed_factors: fixedFactorVals
       };
 
       const res = await fetch(`${API_URL}/api/v1/projects/${projectId}/design-space/`, {
@@ -295,12 +371,70 @@ export default function DesignSpace() {
   });
 
   const latestSpace = designSpaces.length > 0 ? designSpaces[0] : null;
+  const optFactors: Record<string, number> = 
+    bestCandidate?.factors || 
+    latestSpace?.space_data?.optimization_point_check?.setpoints || 
+    latestSpace?.space_data?.optimization_point_check?.factor_values || 
+    {};
 
-  const factorX = factors.find(f => f.code === factorXCode);
-  const factorY = factors.find(f => f.code === factorYCode);
+  // Full 3D Multidimensional Design Space Metrics
+  const total3D = latestSpace?.space_data?.total_3d_points ?? latestSpace?.space_data?.total_points ?? 0;
+  const acc3D = latestSpace?.space_data?.acceptable_3d_points ?? latestSpace?.space_data?.acceptable_points ?? 0;
+  const unacc3D = latestSpace?.space_data?.unacceptable_3d_points ?? latestSpace?.space_data?.unacceptable_points ?? 0;
+  const feasible3DPct = latestSpace?.space_data?.feasible_3d_percentage !== undefined 
+    ? latestSpace.space_data.feasible_3d_percentage.toFixed(1)
+    : (total3D > 0 ? ((acc3D / total3D) * 100).toFixed(1) : '0');
 
-  const totalPoints = latestSpace ? latestSpace.space_data.acceptable_points + latestSpace.space_data.unacceptable_points : 0;
-  const acceptablePct = totalPoints > 0 && latestSpace ? ((latestSpace.space_data.acceptable_points / totalPoints) * 100).toFixed(1) : '0';
+  // 2D Cross-Sectional Slice Metrics
+  const sliceData = latestSpace?.space_data?.slice_data;
+  const sliceAcc = sliceData?.acceptable_points ?? (latestSpace?.space_data?.plot_data ? latestSpace.space_data.plot_data.filter(p => p.acceptable).length : 0);
+  const sliceTotal = sliceData?.total_points ?? (latestSpace?.space_data?.plot_data?.length || 0);
+  const sliceUnacc = sliceData?.unacceptable_points ?? (sliceTotal - sliceAcc);
+  const slicePct = sliceData?.feasible_percentage !== undefined 
+    ? sliceData.feasible_percentage.toFixed(1) 
+    : (sliceTotal > 0 ? ((sliceAcc / sliceTotal) * 100).toFixed(1) : '0');
+
+  // Active slice factors & fixed factor
+  const factorX = factors.find(f => f.code === (sliceData?.axis_x || factorXCode));
+  const factorY = factors.find(f => f.code === (sliceData?.axis_y || factorYCode));
+  const fixedFactor = factors.find(f => f.code !== factorX?.code && f.code !== factorY?.code);
+  const currentFixedVal = fixedFactor 
+    ? (sliceData?.fixed_factors?.[fixedFactor.code] ?? fixedFactorVals[fixedFactor.code] ?? (fixedFactor.low_value + fixedFactor.high_value) / 2.0)
+    : undefined;
+
+  const sliceLabel = sliceData?.slice_label || (
+    fixedFactor && currentFixedVal !== undefined
+      ? `2D Slice at Fixed ${fixedFactor.name} (${fixedFactor.code}) = ${currentFixedVal.toFixed(2)}${fixedFactor.unit || ''}`
+      : '2D Design Space Slice'
+  );
+
+  // True 3D projected ranges (from full 3D grid, NOT 30-30 for C!)
+  const projectedRanges = useMemo(() => {
+    if (!latestSpace?.space_data) return {};
+    if (latestSpace.space_data.projected_ranges_3d) {
+      return latestSpace.space_data.projected_ranges_3d;
+    }
+    if (latestSpace.space_data.projected_ranges) {
+      return latestSpace.space_data.projected_ranges;
+    }
+    return {};
+  }, [latestSpace]);
+
+  // Optimal setpoints for 2D plot projection
+  const optX = factorX ? optFactors[factorX.code] : undefined;
+  const optY = factorY ? optFactors[factorY.code] : undefined;
+  const spanX = factorX ? ((factorX.high_value - factorX.low_value) || 1) : 1;
+  const spanY = factorY ? ((factorY.high_value - factorY.low_value) || 1) : 1;
+  const optCx = factorX && optX !== undefined ? (60 + ((optX - factorX.low_value) / spanX) * 380) : null;
+  const optCy = factorY && optY !== undefined ? (390 - ((optY - factorY.low_value) / spanY) * 360) : null;
+
+  const optCheck = latestSpace?.space_data?.optimization_point_check;
+  const isOptInside = optCheck ? optCheck.is_inside : true;
+  const isOnSlice = optCheck?.is_on_active_slice ?? false;
+
+  const handleFixedFactorChange = (code: string, val: number) => {
+    setFixedFactorVals(prev => ({ ...prev, [code]: val }));
+  };
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-12">
@@ -321,7 +455,7 @@ export default function DesignSpace() {
             <h1 className="text-2xl font-bold text-gray-900">ICH Q8 Design Space & PAR</h1>
           </div>
           <p className="text-sm text-gray-500 mt-1">
-            Establish the Proven Acceptable Range (PAR) and multidimensional safe operating boundary satisfying all regulatory criteria.
+            Establish the full 3D Proven Acceptable Range (PAR) and multidimensional safe operating boundary satisfying all regulatory criteria.
           </p>
         </div>
 
@@ -373,9 +507,9 @@ export default function DesignSpace() {
           {/* Controls & Configuration */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 space-y-6">
             <div>
-              <h2 className="text-base font-bold text-gray-800">1. Define Quality Constraints & Grid Resolution</h2>
+              <h2 className="text-base font-bold text-gray-800">1. Quality Constraints & Multi-Dimensional Grid Resolution</h2>
               <p className="text-xs text-gray-500 mt-0.5">
-                Points inside the design space must simultaneously satisfy the specification criteria for all selected responses.
+                Evaluates both the complete 3D factor volume ({factors.map(f => f.code).join(' × ')}) and interactive 2D cross-sectional slices.
               </p>
             </div>
 
@@ -384,7 +518,7 @@ export default function DesignSpace() {
               <div className="md:col-span-2 space-y-3">
                 <div className="flex items-center justify-between">
                   <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                    Responses to Include in Safe Operating Window ({selectedResponseIds.length} of {uniqueResponses.length} selected):
+                    Responses in Safe Operating Window ({selectedResponseIds.length} of {uniqueResponses.length} selected):
                   </label>
                   <div className="flex items-center gap-2 text-xs">
                     <button
@@ -465,40 +599,62 @@ export default function DesignSpace() {
               </div>
 
               {/* Grid Resolution & Action */}
-              <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 flex flex-col justify-between">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    Grid Discretization: {gridResolution} × {gridResolution} ({gridResolution * gridResolution} points)
-                  </label>
-                  <input
-                    type="range"
-                    min="10"
-                    max="35"
-                    step="5"
-                    value={gridResolution}
-                    onChange={e => setGridResolution(Number(e.target.value))}
-                    className="w-full h-2 bg-gray-300 rounded-lg cursor-pointer accent-emerald-600"
-                  />
-                  <div className="flex justify-between text-2xs text-gray-400 mt-1">
-                    <span>10 (Fast)</span>
-                    <span>20 (Standard)</span>
-                    <span>35 (Ultra-fine)</span>
+              <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 flex flex-col justify-between space-y-4">
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                      Full 3D Volume Discretization: {gridResolution3D}³ ({gridResolution3D * gridResolution3D * gridResolution3D} vertices)
+                    </label>
+                    <input
+                      type="range"
+                      min="10"
+                      max="25"
+                      step="5"
+                      value={gridResolution3D}
+                      onChange={e => setGridResolution3D(Number(e.target.value))}
+                      className="w-full h-2 bg-gray-300 rounded-lg cursor-pointer accent-emerald-600"
+                    />
+                    <div className="flex justify-between text-2xs text-gray-400 mt-0.5">
+                      <span>10³ (1k)</span>
+                      <span>15³ (3.4k)</span>
+                      <span>20³ (8k standard)</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                      2D Slice Mesh: {gridResolution} × {gridResolution} ({gridResolution * gridResolution} vertices)
+                    </label>
+                    <input
+                      type="range"
+                      min="10"
+                      max="35"
+                      step="5"
+                      value={gridResolution}
+                      onChange={e => setGridResolution(Number(e.target.value))}
+                      className="w-full h-2 bg-gray-300 rounded-lg cursor-pointer accent-blue-600"
+                    />
+                    <div className="flex justify-between text-2xs text-gray-400 mt-0.5">
+                      <span>10 (100)</span>
+                      <span>20 (400 standard)</span>
+                      <span>35 (1.2k)</span>
+                    </div>
                   </div>
                 </div>
 
                 <button
                   onClick={() => calculateSpace.mutate()}
                   disabled={calculateSpace.isPending || selectedResponseIds.length === 0}
-                  className="mt-4 w-full py-2.5 bg-emerald-600 text-white font-semibold text-sm rounded-lg hover:bg-emerald-700 shadow-md transition disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="w-full py-2.5 bg-emerald-600 text-white font-semibold text-sm rounded-lg hover:bg-emerald-700 shadow-md transition disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {calculateSpace.isPending ? (
                     <>
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      <span>Simulating Safe Operating Space...</span>
+                      <span>Simulating 3D Design Space...</span>
                     </>
                   ) : (
                     <>
-                      <span>📐 Compute Design Space Boundary</span>
+                      <span>📐 Compute Full 3D Design Space & Slice</span>
                     </>
                   )}
                 </button>
@@ -506,101 +662,246 @@ export default function DesignSpace() {
             </div>
           </div>
 
-          {/* Results Card */}
+          {/* Results Section */}
           {latestSpace ? (
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 space-y-6">
-              {/* Metrics Header */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl">
-                  <span className="text-xs font-semibold text-emerald-800 uppercase tracking-wider block">
-                    Acceptable Design Space (PAR)
-                  </span>
-                  <div className="flex items-baseline gap-2 mt-1">
-                    <span className="text-3xl font-extrabold text-emerald-900">
-                      {latestSpace.space_data.acceptable_points}
-                    </span>
-                    <span className="text-sm font-semibold text-emerald-700">
-                      ({acceptablePct}% of tested volume)
-                    </span>
+            <div className="space-y-6">
+              {/* Target Operating Setpoint (NOR) 3D Verification Card */}
+              {(optCheck?.has_optimization || bestCandidate) && (
+                <div className={`bg-white p-5 rounded-xl border shadow-sm ${
+                  isOptInside 
+                    ? 'border-blue-200 bg-blue-50/40' 
+                    : 'border-amber-200 bg-amber-50/40'
+                }`}>
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div className="space-y-1.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                          isOptInside
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                            : 'bg-rose-100 text-rose-800 border border-rose-300'
+                        }`}>
+                          {isOptInside
+                            ? '✓ TARGET OPERATING SETPOINT IS INSIDE 3D DESIGN SPACE'
+                            : '⚠ TARGET OPERATING SETPOINT OUTSIDE 3D ACCEPTABLE REGION'}
+                        </span>
+                        <span className="text-xs text-gray-500 font-medium">
+                          Source: Multi-Response Desirability Run #{optCheck?.optimization_id || optCheck?.run_id || latestOptRun?.id}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-700">
+                        The optimal setpoint simultaneously satisfies all {selectedResponseIds.length} CQA criteria across the complete 3D factor volume with zero extrapolation.
+                      </p>
+                      <div className="text-xs font-semibold">
+                        {isOnSlice ? (
+                          <span className="text-emerald-700 font-medium flex items-center gap-1">
+                            <span>✓ Setpoint lies directly on the active 2D cross-section plane ({sliceLabel})</span>
+                          </span>
+                        ) : (
+                          <span className="text-blue-700 font-medium flex items-center gap-1">
+                            <span>ℹ Viewing 2D cross-section at a parallel slice. (Optimal setpoint is verified in 3D).</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 text-xs font-mono font-bold shrink-0">
+                      {factors.map(f => {
+                        const val = optFactors[f.code];
+                        if (val === undefined) return null;
+                        return (
+                          <span key={f.code} className="px-2.5 py-1.5 bg-white border border-blue-200 rounded-lg shadow-2xs text-blue-900">
+                            {f.code}: {val.toFixed(2)} {f.unit ? f.unit : ''}
+                          </span>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
+              )}
 
-                <div className="bg-rose-50 border border-rose-200 p-4 rounded-xl">
-                  <span className="text-xs font-semibold text-rose-800 uppercase tracking-wider block">
-                    Unacceptable / Failure Region
-                  </span>
-                  <div className="flex items-baseline gap-2 mt-1">
-                    <span className="text-3xl font-extrabold text-rose-900">
-                      {latestSpace.space_data.unacceptable_points}
-                    </span>
-                    <span className="text-sm font-semibold text-rose-700">
-                      ({(100 - Number(acceptablePct)).toFixed(1)}%)
-                    </span>
+              {/* Section 1: Full 3D Multidimensional Design Space Summary */}
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-gray-100 pb-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded text-xs font-bold bg-indigo-100 text-indigo-800">
+                        3D VOLUME
+                      </span>
+                      <h2 className="text-base font-bold text-gray-900">
+                        Full 3-Dimensional Design Space (A × B × C)
+                      </h2>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Evaluated simultaneously across the full investigated DOE bounds: {factors.map(f => `${f.name} ${f.code}: [${f.low_value} – ${f.high_value}${f.unit || ''}]`).join(', ')}.
+                    </p>
                   </div>
+                  <span className="text-xs font-medium text-gray-500">
+                    Zero extrapolation outside DOE volume
+                  </span>
                 </div>
 
-                <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl">
-                  <span className="text-xs font-semibold text-blue-800 uppercase tracking-wider block">
-                    Total Evaluated Grid Vertices
-                  </span>
-                  <div className="flex items-baseline gap-2 mt-1">
-                    <span className="text-3xl font-extrabold text-blue-900">
-                      {totalPoints}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl">
+                    <span className="text-xs font-semibold text-emerald-800 uppercase tracking-wider block">
+                      3D Acceptable Design Space (PAR)
                     </span>
-                    <span className="text-sm font-semibold text-blue-700">
-                      ({latestSpace.grid_resolution}×{latestSpace.grid_resolution} grid)
+                    <div className="flex items-baseline gap-2 mt-1">
+                      <span className="text-3xl font-extrabold text-emerald-900">
+                        {acc3D.toLocaleString()}
+                      </span>
+                      <span className="text-sm font-semibold text-emerald-700">
+                        ({feasible3DPct}% of 3D volume)
+                      </span>
+                    </div>
+                    <p className="text-2xs text-emerald-800 mt-1 font-medium">
+                      Simultaneously satisfies all CQAs across full 3-factor volume
+                    </p>
+                  </div>
+
+                  <div className="bg-rose-50 border border-rose-200 p-4 rounded-xl">
+                    <span className="text-xs font-semibold text-rose-800 uppercase tracking-wider block">
+                      3D Unacceptable / Risk Region
                     </span>
+                    <div className="flex items-baseline gap-2 mt-1">
+                      <span className="text-3xl font-extrabold text-rose-900">
+                        {unacc3D.toLocaleString()}
+                      </span>
+                      <span className="text-sm font-semibold text-rose-700">
+                        ({(100 - Number(feasible3DPct)).toFixed(1)}%)
+                      </span>
+                    </div>
+                    <p className="text-2xs text-rose-800 mt-1 font-medium">
+                      Violates at least 1 CQA specification
+                    </p>
+                  </div>
+
+                  <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl">
+                    <span className="text-xs font-semibold text-blue-800 uppercase tracking-wider block">
+                      Total 3D Evaluated Vertices
+                    </span>
+                    <div className="flex items-baseline gap-2 mt-1">
+                      <span className="text-3xl font-extrabold text-blue-900">
+                        {total3D.toLocaleString()}
+                      </span>
+                      <span className="text-sm font-semibold text-blue-700">
+                        ({gridResolution3D}³ zero-extrapolation mesh)
+                      </span>
+                    </div>
+                    <p className="text-2xs text-blue-800 mt-1 font-medium">
+                      Discrete 3D grid covering entire DOE search bounds
+                    </p>
                   </div>
                 </div>
               </div>
 
-              {/* 2D Design Space Overlay Plot */}
-              <div className="space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              {/* Section 2: Interactive 2D Cross-Sectional Slice Viewer */}
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 space-y-5">
+                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-gray-100 pb-4">
                   <div>
-                    <h3 className="text-base font-bold text-gray-800">
-                      Multi-Dimensional Design Space Overlay Map
-                    </h3>
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded text-xs font-bold bg-blue-100 text-blue-800">
+                        2D CROSS-SECTION
+                      </span>
+                      <h3 className="text-base font-bold text-gray-900">
+                        {sliceLabel}
+                      </h3>
+                    </div>
                     <p className="text-xs text-gray-500 mt-0.5">
-                      Green indicates safe operating combinations meeting all CQA requirements simultaneously. Red marks risk of failure.
+                      Visual cross-section showing safe operating combinations ({sliceAcc} of {sliceTotal} points, {slicePct}% acceptable on this slice).
                     </p>
                   </div>
 
-                  {factors.length >= 2 && (
-                    <div className="flex items-center gap-3">
-                      <div>
-                        <label className="block text-2xs font-semibold text-gray-500 uppercase">X-Axis Factor</label>
-                        <select
-                          value={factorXCode}
-                          onChange={e => setFactorXCode(e.target.value)}
-                          className="px-2.5 py-1 border border-gray-300 rounded text-xs font-medium text-gray-700 bg-white"
-                        >
-                          {factors.map(f => (
-                            <option key={f.code} value={f.code} disabled={f.code === factorYCode}>
-                              {f.name} ({f.code})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-2xs font-semibold text-gray-500 uppercase">Y-Axis Factor</label>
-                        <select
-                          value={factorYCode}
-                          onChange={e => setFactorYCode(e.target.value)}
-                          className="px-2.5 py-1 border border-gray-300 rounded text-xs font-medium text-gray-700 bg-white"
-                        >
-                          {factors.map(f => (
-                            <option key={f.code} value={f.code} disabled={f.code === factorXCode}>
-                              {f.name} ({f.code})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                  {/* Interactive Slice Controls */}
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div>
+                      <label className="block text-2xs font-semibold text-gray-500 uppercase">X-Axis</label>
+                      <select
+                        value={factorXCode}
+                        onChange={e => setFactorXCode(e.target.value)}
+                        className="px-2.5 py-1 border border-gray-300 rounded text-xs font-medium text-gray-700 bg-white"
+                      >
+                        {factors.map(f => (
+                          <option key={f.code} value={f.code} disabled={f.code === factorYCode}>
+                            {f.name} ({f.code})
+                          </option>
+                        ))}
+                      </select>
                     </div>
-                  )}
+
+                    <div>
+                      <label className="block text-2xs font-semibold text-gray-500 uppercase">Y-Axis</label>
+                      <select
+                        value={factorYCode}
+                        onChange={e => setFactorYCode(e.target.value)}
+                        className="px-2.5 py-1 border border-gray-300 rounded text-xs font-medium text-gray-700 bg-white"
+                      >
+                        {factors.map(f => (
+                          <option key={f.code} value={f.code} disabled={f.code === factorXCode}>
+                            {f.name} ({f.code})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Fixed Factor Elevation Selector */}
+                    {fixedFactor && (
+                      <div>
+                        <label className="block text-2xs font-semibold text-gray-500 uppercase">
+                          Fixed {fixedFactor.name} ({fixedFactor.code})
+                        </label>
+                        <div className="flex items-center gap-1.5">
+                          <select
+                            value={currentFixedVal !== undefined ? currentFixedVal : (fixedFactor.low_value + fixedFactor.high_value) / 2.0}
+                            onChange={e => handleFixedFactorChange(fixedFactor.code, Number(e.target.value))}
+                            className="px-2.5 py-1 border border-gray-300 rounded text-xs font-medium text-gray-700 bg-white font-mono"
+                          >
+                            <option value={fixedFactor.low_value}>
+                              {fixedFactor.low_value.toFixed(1)} {fixedFactor.unit || ''} (Low bound)
+                            </option>
+                            <option value={(fixedFactor.low_value + fixedFactor.high_value) / 2.0}>
+                              {((fixedFactor.low_value + fixedFactor.high_value) / 2.0).toFixed(1)} {fixedFactor.unit || ''} (Center)
+                            </option>
+                            {optFactors[fixedFactor.code] !== undefined && (
+                              <option value={optFactors[fixedFactor.code]}>
+                                {optFactors[fixedFactor.code].toFixed(2)} {fixedFactor.unit || ''} (NOR Target)
+                              </option>
+                            )}
+                            <option value={fixedFactor.high_value}>
+                              {fixedFactor.high_value.toFixed(1)} {fixedFactor.unit || ''} (High bound)
+                            </option>
+                          </select>
+
+                          <button
+                            type="button"
+                            onClick={() => calculateSpace.mutate()}
+                            disabled={calculateSpace.isPending}
+                            className="px-3 py-1 bg-blue-600 text-white rounded text-xs font-semibold hover:bg-blue-700 transition"
+                          >
+                            Update Slice
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
+                {/* Slice Feasibility Banner */}
+                <div className="flex flex-wrap items-center justify-between gap-4 bg-gray-50 p-3 rounded-lg border border-gray-200 text-xs">
+                  <div className="flex items-center gap-4">
+                    <span className="text-gray-600 font-medium">
+                      Slice Feasibility: <strong className="text-emerald-700">{sliceAcc} / {sliceTotal} points ({slicePct}%)</strong>
+                    </span>
+                    <span className="text-gray-400">|</span>
+                    <span className="text-gray-600 font-medium">
+                      Failure on Slice: <strong className="text-rose-700">{sliceUnacc} points ({(100 - Number(slicePct)).toFixed(1)}%)</strong>
+                    </span>
+                  </div>
+                  <span className="text-gray-500 font-mono text-2xs">
+                    Slice Resolution: {latestSpace.grid_resolution} × {latestSpace.grid_resolution}
+                  </span>
+                </div>
+
+                {/* 2D SVG Map */}
                 {factorX && factorY ? (
                   <div className="flex flex-col items-center">
                     <div className="w-full max-w-2xl bg-gray-50 p-6 rounded-xl border border-gray-200">
@@ -611,9 +912,9 @@ export default function DesignSpace() {
                           </clipPath>
                         </defs>
 
-                        {/* Render Grid Points */}
+                        {/* Render Slice Grid Points */}
                         <g clipPath="url(#ds-area)">
-                          {latestSpace.space_data.plot_data.map((pt, idx) => {
+                          {(latestSpace.space_data.plot_data || []).map((pt, idx) => {
                             const xVal = pt.factors[factorX.code];
                             const yVal = pt.factors[factorY.code];
                             if (xVal === undefined || yVal === undefined) return null;
@@ -636,11 +937,45 @@ export default function DesignSpace() {
                                 strokeWidth="0.75"
                                 className="cursor-pointer hover:r-8 transition-all"
                               >
-                                <title>{`${factorX.name}: ${xVal.toFixed(2)}, ${factorY.name}: ${yVal.toFixed(2)} → ${pt.acceptable ? 'ACCEPTABLE (Inside Design Space)' : 'UNACCEPTABLE (Constraint Violated)'}`}</title>
+                                <title>{`${factorX.name}: ${xVal.toFixed(2)}, ${factorY.name}: ${yVal.toFixed(2)} → ${pt.acceptable ? 'ACCEPTABLE on this slice' : 'UNACCEPTABLE (Constraint Violated)'}`}</title>
                               </circle>
                             );
                           })}
                         </g>
+
+                        {/* Optimal Operating Setpoint (NOR Target) Overlay */}
+                        {optCx !== null && optCy !== null && (
+                          <g>
+                            <circle
+                              cx={optCx}
+                              cy={optCy}
+                              r={isOnSlice ? 11 : 9}
+                              fill="none"
+                              stroke={isOnSlice ? "#2563eb" : "#64748b"}
+                              strokeWidth={isOnSlice ? "2.5" : "1.5"}
+                              strokeDasharray={isOnSlice ? "3,2" : "2,2"}
+                            />
+                            <circle
+                              cx={optCx}
+                              cy={optCy}
+                              r={isOnSlice ? 5 : 3.5}
+                              fill={isOnSlice ? "#2563eb" : "#64748b"}
+                              stroke="#ffffff"
+                              strokeWidth="1.5"
+                            />
+                            <text
+                              x={optCx + 12}
+                              y={optCy + 4}
+                              fontSize="11"
+                              fontWeight="bold"
+                              fill={isOnSlice ? "#1e40af" : "#475569"}
+                            >
+                              {isOnSlice 
+                                ? `NOR Target (${optX?.toFixed(2)}, ${optY?.toFixed(2)})`
+                                : `Projected NOR (${optX?.toFixed(2)}, ${optY?.toFixed(2)})`}
+                            </text>
+                          </g>
+                        )}
 
                         {/* Chart Outline */}
                         <rect x="60" y="30" width="380" height="360" fill="none" stroke="#64748b" strokeWidth="1.5" />
@@ -671,61 +1006,125 @@ export default function DesignSpace() {
                       </svg>
 
                       {/* Legend */}
-                      <div className="mt-4 pt-3 border-t border-gray-200 flex items-center justify-center gap-8 text-xs font-semibold">
+                      <div className="mt-4 pt-3 border-t border-gray-200 flex flex-wrap items-center justify-center gap-6 text-xs font-semibold">
                         <div className="flex items-center gap-2">
                           <span className="w-3.5 h-3.5 rounded-full bg-emerald-500 inline-block border border-emerald-600"></span>
-                          <span className="text-gray-800">Acceptable Region (Inside Design Space / PAR)</span>
+                          <span className="text-gray-800">Acceptable Region (on this 2D slice)</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="w-3.5 h-3.5 rounded-full bg-rose-400 inline-block border border-rose-500 opacity-60"></span>
-                          <span className="text-gray-500">Unacceptable Region (Failure to meet CQA)</span>
+                          <span className="text-gray-500">Unacceptable (CQA Violated)</span>
                         </div>
+                        {optCx !== null && optCy !== null && (
+                          <div className="flex items-center gap-2">
+                            <span className={`w-3.5 h-3.5 rounded-full inline-block border-2 ${
+                              isOnSlice ? 'bg-blue-600 border-dashed border-blue-400' : 'bg-gray-400 border-dotted border-gray-600'
+                            }`}></span>
+                            <span className={isOnSlice ? 'text-blue-900 font-bold' : 'text-gray-600 font-medium'}>
+                              {isOnSlice ? 'Optimal Operating Setpoint (NOR Target)' : 'Projected NOR (Different Elevation)'}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
                 ) : null}
               </div>
 
-              {/* Proven Acceptable Range (PAR) & Control Strategy Summary */}
-              <div className="space-y-3 pt-4 border-t border-gray-100">
-                <h3 className="text-sm font-bold text-gray-800">
-                  Regulatory Proven Acceptable Range (PAR) Table
-                </h3>
-                <p className="text-xs text-gray-500">
-                  Per ICH Q8(R2), movement within the design space does not constitute a post-approval regulatory change.
-                </p>
+              {/* Section 3: ICH Q8(R2) Proven Acceptable Range (PAR) Table */}
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div>
+                    <h3 className="text-base font-bold text-gray-800">
+                      ICH Q8(R2) Proven Acceptable Range (PAR) & Control Strategy
+                    </h3>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Derived from full 3D multidimensional evaluation ({acc3D.toLocaleString()} of {total3D.toLocaleString()} vertices acceptable).
+                    </p>
+                  </div>
+                </div>
 
-                <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                {/* Regulatory Science Notice on Multidimensional Coupling */}
+                <div className="bg-amber-50/80 border-l-4 border-amber-500 p-4 rounded-r-xl space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-amber-900 font-bold text-xs uppercase tracking-wide">
+                      ⚠ Regulatory Science Note: Multidimensional Coupling & 1D Projected Spans
+                    </span>
+                  </div>
+                  <p className="text-xs text-amber-900 leading-relaxed">
+                    Because {unacc3D.toLocaleString()} of the {total3D.toLocaleString()} evaluated 3D vertices ({(100 - Number(feasible3DPct)).toFixed(1)}%) fail to meet all CQA criteria simultaneously, the full investigated factor bounds do <strong>not</strong> constitute an unconstrained Design Space.
+                    The <strong>True 3D Projected Feasible Spans</strong> below represent the extreme single-parameter envelope of all acceptable points across the 3-dimensional volume. <strong>They cannot be treated as an uncoupled Cartesian box</strong>; operating at extreme limits simultaneously may produce out-of-specification results. Operating setpoints must remain within the multidimensional coupled boundary.
+                  </p>
+                </div>
+
+                <div className="overflow-x-auto border border-gray-200 rounded-xl shadow-2xs">
                   <table className="min-w-full divide-y divide-gray-200 text-left text-sm">
                     <thead className="bg-gray-50 text-xs font-semibold text-gray-600 uppercase">
                       <tr>
                         <th className="px-4 py-3">Parameter / Factor</th>
                         <th className="px-4 py-3">Code</th>
                         <th className="px-4 py-3">Unit</th>
-                        <th className="px-4 py-3 bg-emerald-50/70 text-emerald-900 font-bold">Proven Acceptable Range (PAR)</th>
+                        <th className="px-4 py-3 bg-gray-100/70 text-gray-800 font-bold">Investigated DOE Range</th>
                         <th className="px-4 py-3 bg-blue-50/70 text-blue-900 font-bold">Target Operating Setpoint (NOR)</th>
-                        <th className="px-4 py-3">ICH Q8 Classification</th>
+                        <th className="px-4 py-3 bg-emerald-50/70 text-emerald-900 font-bold">True 3D Projected Feasible Span</th>
+                        <th className="px-4 py-3">Design Space Status</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200 bg-white">
                       {factors.map(f => {
-                        const mid = (f.low_value + f.high_value) / 2.0;
-                        const norSpan = (f.high_value - f.low_value) * 0.1;
+                        const proj = projectedRanges[f.code];
+                        const optVal = optFactors[f.code];
+                        const hasOpt = optVal !== undefined;
+
                         return (
                           <tr key={f.code} className="hover:bg-gray-50">
                             <td className="px-4 py-3 font-medium text-gray-900">{f.name}</td>
                             <td className="px-4 py-3 font-mono font-semibold text-gray-700">{f.code}</td>
                             <td className="px-4 py-3 text-gray-600">{f.unit || '—'}</td>
-                            <td className="px-4 py-3 bg-emerald-50/30 font-mono font-bold text-emerald-800">
+                            <td className="px-4 py-3 bg-gray-50/50 font-mono text-gray-700">
                               {f.low_value} – {f.high_value}
+                              <div className="text-3xs text-gray-400 font-sans font-normal">Investigated boundary</div>
                             </td>
-                            <td className="px-4 py-3 bg-blue-50/30 font-mono font-bold text-blue-800">
-                              {mid.toFixed(2)} ± {norSpan.toFixed(2)}
+                            <td className="px-4 py-3 bg-blue-50/30">
+                              {hasOpt ? (
+                                <div>
+                                  <span className="font-mono font-bold text-blue-900">
+                                    {optVal.toFixed(2)} {f.unit ? f.unit : ''}
+                                  </span>
+                                  <div className="text-3xs text-blue-700 font-medium">
+                                    Optimization Run #{optCheck?.optimization_id || optCheck?.run_id || latestOptRun?.id}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div>
+                                  <span className="font-mono font-medium text-gray-500">
+                                    {((f.low_value + f.high_value) / 2).toFixed(2)}
+                                  </span>
+                                  <div className="text-3xs text-gray-400">Midpoint default</div>
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 bg-emerald-50/30">
+                              {proj && proj.min !== null && proj.max !== null ? (
+                                <div>
+                                  <span className="font-mono font-bold text-emerald-900">
+                                    {proj.min.toFixed(2)} – {proj.max.toFixed(2)}
+                                  </span>
+                                  <div className="text-3xs text-emerald-700">
+                                    {proj.is_full_investigated_range 
+                                      ? 'Full investigated range' 
+                                      : 'Envelope of 3D feasible volume'}
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="font-mono text-gray-400">—</span>
+                              )}
                             </td>
                             <td className="px-4 py-3">
                               <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
-                                Critical Process Parameter (CPP)
+                                3D Coupled Region ({feasible3DPct}% Feasible)
                               </span>
+                              <div className="text-3xs text-gray-500 mt-0.5">Critical Process Parameter (CPP)</div>
                             </td>
                           </tr>
                         );

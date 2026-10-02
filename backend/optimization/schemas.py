@@ -20,6 +20,7 @@ class ConfirmationRequest(BaseModel):
     optimization_id: int
     predicted_values: Dict[str, float]
     actual_values: Dict[str, float]
+    data_source: str = "SIMULATED"  # SIMULATED or EXPERIMENTAL
 
 class ConfirmationResult(BaseModel):
     id: int
@@ -28,6 +29,7 @@ class ConfirmationResult(BaseModel):
     predicted_values: Dict[str, float]
     actual_values: Dict[str, float]
     differences: Dict[str, float]
+    data_source: str = "SIMULATED"
     created_at: str
 
     class Config:

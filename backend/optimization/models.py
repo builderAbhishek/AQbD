@@ -24,6 +24,7 @@ class ConfirmationRun(Base):
     predicted_values = Column(JSON, nullable=False)
     actual_values = Column(JSON, nullable=False)
     differences = Column(JSON, nullable=False)
+    data_source = Column(String, nullable=False, default="SIMULATED")  # SIMULATED or EXPERIMENTAL
     created_at = Column(String, nullable=False)
 
     project = relationship("Project", back_populates="confirmation_runs")

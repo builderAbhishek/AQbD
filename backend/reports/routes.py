@@ -34,14 +34,36 @@ def generate_report(project_id: int, db: Session = Depends(get_db)):
     from doe.models import DOEDesign
     from analysis.models import Analysis
     from optimization.models import OptimizationRun, ConfirmationRun
+    from design_space.models import DesignSpace
 
     atp_items = db.query(ATPParameter).filter(ATPParameter.project_id == project_id).all()
     risk_items = db.query(RiskAssessment).filter(RiskAssessment.project_id == project_id).all()
     factor_items = db.query(Factor).filter(Factor.project_id == project_id).all()
     resp_items = db.query(ResponseModel).filter(ResponseModel.project_id == project_id).all()
-    doe_items = db.query(DOEDesign).filter(DOEDesign.project_id == project_id).all()
-    analysis_items = db.query(Analysis).filter(Analysis.project_id == project_id).all()
-    opt_items = db.query(OptimizationRun).filter(OptimizationRun.project_id == project_id).all()
+    
+    # Get active DOE (latest)
+    doe_items = db.query(DOEDesign).filter(DOEDesign.project_id == project_id).order_by(DOEDesign.id.desc()).all()
+    active_doe = doe_items[0] if doe_items else None
+    
+    # Get active models (latest per response)
+    all_analyses = db.query(Analysis).filter(Analysis.project_id == project_id).all()
+    # Group by response_id and get the one with the max id
+    latest_analyses_map = {}
+    for a in all_analyses:
+        if a.response_id not in latest_analyses_map or a.id > latest_analyses_map[a.response_id].id:
+            latest_analyses_map[a.response_id] = a
+    
+    active_analyses = list(latest_analyses_map.values())
+    historical_model_count = len(all_analyses) - len(active_analyses)
+    
+    # Get active Optimization (latest)
+    opt_items = db.query(OptimizationRun).filter(OptimizationRun.project_id == project_id).order_by(OptimizationRun.id.desc()).all()
+    active_opt = opt_items[0] if opt_items else None
+    
+    # Get active Design Space (latest)
+    ds_items = db.query(DesignSpace).filter(DesignSpace.project_id == project_id).order_by(DesignSpace.id.desc()).all()
+    active_ds = ds_items[0] if ds_items else None
+    
     conf_items = db.query(ConfirmationRun).filter(ConfirmationRun.project_id == project_id).all()
 
     project_data = {
@@ -51,10 +73,12 @@ def generate_report(project_id: int, db: Session = Depends(get_db)):
         "risks": [{"parameter": r.parameter, "severity": r.severity, "occurrence": r.occurrence, "detectability": r.detectability, "risk_score": r.risk_score, "priority": r.priority} for r in risk_items],
         "factors": [{"code": f.code, "name": f.name, "unit": f.unit, "low_value": f.low_value, "high_value": f.high_value, "role": f.role} for f in factor_items],
         "responses": [{"code": r.code, "name": r.name, "unit": r.unit, "target_type": r.target_type, "target": r.target, "lower_limit": r.lower_limit, "upper_limit": r.upper_limit, "importance": r.importance} for r in resp_items],
-        "does": [{"id": d.id, "design_type": d.design_type, "run_count": len(d.standard_order), "seed": d.random_seed} for d in doe_items],
-        "analyses": [{"id": a.id, "model_type": a.model_type, "metrics": a.metrics, "coefficients": a.coefficients} for a in analysis_items],
-        "optimizations": [{"id": o.id, "candidates": o.candidates} for o in opt_items],
-        "confirmations": [{"id": c.id, "predicted": c.predicted_values, "actual": c.actual_values, "diffs": c.differences} for c in conf_items]
+        "active_doe": {"id": active_doe.id, "design_type": active_doe.design_type, "run_count": len(active_doe.standard_order), "seed": active_doe.random_seed} if active_doe else None,
+        "active_analyses": [{"id": a.id, "response_id": a.response_id, "model_type": a.model_type, "metrics": a.metrics, "coefficients": a.coefficients} for a in active_analyses],
+        "historical_model_count": historical_model_count,
+        "active_optimization": {"id": active_opt.id, "candidates": active_opt.candidates} if active_opt else None,
+        "active_design_space": {"id": active_ds.id, "grid_resolution": active_ds.grid_resolution, "space_data": active_ds.space_data} if active_ds else None,
+        "confirmations": [{"id": c.id, "predicted": c.predicted_values, "actual": c.actual_values, "diffs": c.differences, "data_source": getattr(c, 'data_source', 'SIMULATED')} for c in conf_items]
     }
 
     try:

@@ -112,6 +112,11 @@ def confirm_optimization(project_id: int, request: schemas.ConfirmationRequest, 
     if not opt_run:
         raise HTTPException(status_code=404, detail="Optimization run not found")
 
+    # Validate data_source
+    data_source = request.data_source.upper() if request.data_source else "SIMULATED"
+    if data_source not in ("SIMULATED", "EXPERIMENTAL"):
+        raise HTTPException(status_code=400, detail="data_source must be SIMULATED or EXPERIMENTAL")
+
     diffs = {}
     for key, actual in request.actual_values.items():
         predicted = request.predicted_values.get(key)
@@ -124,6 +129,7 @@ def confirm_optimization(project_id: int, request: schemas.ConfirmationRequest, 
         predicted_values=request.predicted_values,
         actual_values=request.actual_values,
         differences=diffs,
+        data_source=data_source,
         created_at=datetime.utcnow().isoformat()
     )
     db.add(conf_run)

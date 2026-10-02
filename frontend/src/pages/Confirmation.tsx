@@ -19,8 +19,9 @@ interface ResponseItem {
   name: string;
   unit?: string;
   target_type: string;
-  lower_limit?: number;
-  upper_limit?: number;
+  target?: number | null;
+  lower_limit?: number | null;
+  upper_limit?: number | null;
 }
 
 interface OptimizationCandidate {
@@ -46,6 +47,7 @@ interface ConfirmationResult {
   predicted_values: Record<string, number>;
   actual_values: Record<string, number>;
   differences: Record<string, number>;
+  data_source?: string;
   created_at: string;
 }
 
@@ -54,6 +56,7 @@ export default function Confirmation() {
   const queryClient = useQueryClient();
   const [projectId, setProjectId] = useState<number | null>(null);
   const [actualValues, setActualValues] = useState<Record<string, string>>({});
+  const [isSimulated, setIsSimulated] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -120,6 +123,7 @@ export default function Confirmation() {
   // Pre-fill inputs with predicted values as baseline if empty
   const handleInputChange = (code: string, val: string) => {
     setActualValues(prev => ({ ...prev, [code]: val }));
+    setIsSimulated(false);
   };
 
   const handleFillWithPredicted = () => {
@@ -131,6 +135,7 @@ export default function Confirmation() {
       }
     });
     setActualValues(filled);
+    setIsSimulated(true);
   };
 
   // Submit confirmation run
@@ -164,7 +169,8 @@ export default function Confirmation() {
         body: JSON.stringify({
           optimization_id: latestOpt.id,
           predicted_values: numericPreds,
-          actual_values: numericActuals
+          actual_values: numericActuals,
+          data_source: isSimulated ? 'SIMULATED' : 'EXPERIMENTAL'
         })
       });
 
@@ -176,7 +182,11 @@ export default function Confirmation() {
       return res.json();
     },
     onSuccess: () => {
-      setSuccessMessage('✓ Confirmation experiment successfully recorded and verified!');
+      if (isSimulated) {
+        setSuccessMessage('✓ SIMULATED confirmation record saved. This is TEST DATA from model predictions — not laboratory confirmation.');
+      } else {
+        setSuccessMessage('✓ Confirmation experiment successfully recorded and verified!');
+      }
       queryClient.invalidateQueries({ queryKey: ['confirmations', projectId] });
     },
     onError: (err: Error) => {
@@ -314,6 +324,21 @@ export default function Confirmation() {
               </button>
             </div>
 
+            {isSimulated && (
+              <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded-r-lg">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="px-2 py-0.5 rounded text-xs font-bold bg-amber-200 text-amber-900 uppercase tracking-wider">
+                    ⚠ Simulated / Test Data
+                  </span>
+                </div>
+                <p className="text-xs text-amber-800 leading-relaxed">
+                  Values below are auto-filled from model predictions (not from laboratory experiments).
+                  This confirmation record will be labeled as <strong>SIMULATED</strong> and must not be presented as empirical laboratory confirmation.
+                  To record real confirmation data, manually enter actual observed values from laboratory experiments.
+                </p>
+              </div>
+            )}
+
             <div className="overflow-x-auto border border-gray-200 rounded-lg">
               <table className="min-w-full divide-y divide-gray-200 text-left text-sm">
                 <thead className="bg-gray-50 text-xs font-semibold text-gray-600 uppercase">
@@ -341,12 +366,25 @@ export default function Confirmation() {
                     let isConforming = true;
                     if (hasValue) {
                       if (r.target_type === 'RANGE') {
-                        if (r.lower_limit !== undefined && actualNum < r.lower_limit) isConforming = false;
-                        if (r.upper_limit !== undefined && actualNum > r.upper_limit) isConforming = false;
-                      } else if (r.target_type === 'MAXIMIZE' && r.lower_limit !== undefined) {
+                        if (r.lower_limit != null && actualNum < r.lower_limit) isConforming = false;
+                        if (r.upper_limit != null && actualNum > r.upper_limit) isConforming = false;
+                      } else if (r.target_type === 'MAXIMIZE' && r.lower_limit != null) {
                         if (actualNum < r.lower_limit) isConforming = false;
-                      } else if (r.target_type === 'MINIMIZE' && r.upper_limit !== undefined) {
+                      } else if (r.target_type === 'MINIMIZE' && r.upper_limit != null) {
                         if (actualNum > r.upper_limit) isConforming = false;
+                      } else if (r.target_type === 'TARGET') {
+                        // If explicit bounds exist, use them; otherwise check ±20% of target
+                        if (r.lower_limit != null && actualNum < r.lower_limit) {
+                          isConforming = false;
+                        } else if (r.upper_limit != null && actualNum > r.upper_limit) {
+                          isConforming = false;
+                        } else if (r.target != null && r.lower_limit == null && r.upper_limit == null) {
+                          // No explicit limits configured: use ±20% of target as conformance window
+                          const tolerance = Math.abs(r.target) * 0.20;
+                          if (actualNum < r.target - tolerance || actualNum > r.target + tolerance) {
+                            isConforming = false;
+                          }
+                        }
                       }
                     }
 
@@ -355,8 +393,15 @@ export default function Confirmation() {
                         <td className="px-4 py-3 font-medium text-gray-900">{r.name}</td>
                         <td className="px-4 py-3 font-mono font-semibold text-gray-700">{r.code}</td>
                         <td className="px-4 py-3 text-xs text-gray-600">
-                          {r.target_type}
-                          {r.lower_limit !== undefined && r.upper_limit !== undefined && ` [${r.lower_limit}–${r.upper_limit}]`}
+                          {r.target_type === 'TARGET' && r.target != null
+                            ? `TARGET ${r.target}${r.unit ? ` ${r.unit}` : ''}`
+                            : r.target_type === 'MAXIMIZE' && r.lower_limit != null
+                            ? `MAXIMIZE ≥ ${r.lower_limit}${r.unit ? ` ${r.unit}` : ''}`
+                            : r.target_type === 'MINIMIZE' && r.upper_limit != null
+                            ? `MINIMIZE ≤ ${r.upper_limit}${r.unit ? ` ${r.unit}` : ''}`
+                            : r.target_type === 'RANGE' && r.lower_limit != null && r.upper_limit != null
+                            ? `RANGE [${r.lower_limit}–${r.upper_limit}]${r.unit ? ` ${r.unit}` : ''}`
+                            : r.target_type}
                         </td>
                         <td className="px-4 py-3 bg-blue-50/30 font-mono font-bold text-blue-700">
                           {pred.toFixed(3)} {r.unit || ''}
@@ -438,14 +483,15 @@ export default function Confirmation() {
                       <th className="px-4 py-3">Confirmation ID</th>
                       <th className="px-4 py-3">Date Recorded</th>
                       <th className="px-4 py-3">Opt Run #</th>
+                      <th className="px-4 py-3">Data Source</th>
                       <th className="px-4 py-3">Observed Differences (|Actual - Pred|)</th>
-                      <th className="px-4 py-3">Overall Model Verdict</th>
+                      <th className="px-4 py-3">Verdict</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 bg-white">
                     {confirmations.map(c => {
                       const diffKeys = Object.keys(c.differences || {});
-                      const maxDiff = diffKeys.length > 0 ? Math.max(...diffKeys.map(k => c.differences[k])) : 0;
+                      const isExp = c.data_source === 'EXPERIMENTAL';
                       return (
                         <tr key={c.id} className="hover:bg-gray-50">
                           <td className="px-4 py-3 font-mono font-bold text-gray-900">CR-{c.id}</td>
@@ -453,6 +499,15 @@ export default function Confirmation() {
                             {new Date(c.created_at).toLocaleString()}
                           </td>
                           <td className="px-4 py-3 font-mono text-gray-600">#{c.optimization_id}</td>
+                          <td className="px-4 py-3">
+                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                              isExp
+                                ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                                : 'bg-amber-100 text-amber-800 border border-amber-200'
+                            }`}>
+                              {isExp ? '🧪 Experimental' : '⚙ Simulated'}
+                            </span>
+                          </td>
                           <td className="px-4 py-3 text-xs font-mono text-gray-700">
                             {diffKeys.map(k => (
                               <span key={k} className="inline-block bg-gray-100 px-2 py-0.5 rounded mr-2 mb-1">
@@ -461,9 +516,15 @@ export default function Confirmation() {
                             ))}
                           </td>
                           <td className="px-4 py-3">
-                            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
-                              ✓ Model Validated
-                            </span>
+                            {isExp ? (
+                              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+                                ✓ Model Validated
+                              </span>
+                            ) : (
+                              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-600">
+                                Software Verification Passed
+                              </span>
+                            )}
                           </td>
                         </tr>
                       );

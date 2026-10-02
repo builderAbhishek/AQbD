@@ -1,4 +1,6 @@
-# AQbD Studio V1
+import os
+
+readme_content = """# AQbD Studio V1
 
 ## 1. Project Overview
 
@@ -383,3 +385,9 @@ AQbD Studio is a React/FastAPI stack. You define critical quality attributes and
 *   User Roles and Access Management.
 *   Direct integration with Chromatography Data Systems (CDS).
 *   Windows EXE packaging for standalone offline lab deployments.
+"""
+
+with open("F:\\Developer Abhishek\\Website\\AQbD\\README.md", "w", encoding="utf-8") as f:
+    f.write(readme_content)
+
+print("README.md written successfully.")
