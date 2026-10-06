@@ -1,0 +1,23 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x", "linux-musl", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Project {
+  id             String    @id @default(uuid())
+  name           String
+  status         String    @default("NEW")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  lastOpenedAt   DateTime? @map("last_opened_at")
+  archivedAt     DateTime? @map("archived_at")
+  version        Int       @default(1)
+  data           Json?     // Used to store current temporary project state/metadata
+  
+  @@map("projects")
+}

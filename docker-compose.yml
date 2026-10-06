@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: aqbd_db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-aqbd_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aqbd_password}
+      POSTGRES_DB: ${POSTGRES_DB:-aqbd_studio}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aqbd_user} -d ${POSTGRES_DB:-aqbd_studio}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: 
+      context: ./backend
+    container_name: aqbd_backend
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-aqbd_user}:${POSTGRES_PASSWORD:-aqbd_password}@db:5432/${POSTGRES_DB:-aqbd_studio}?schema=public
+      - FRONTEND_URL=http://localhost:3000
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/prisma:/app/prisma
+    depends_on:
+      db:
+        condition: service_healthy
+    command: sh -c "npx prisma db push && npm run dev"
+
+  frontend:
+    build: 
+      context: ./frontend
+    container_name: aqbd_frontend
+    environment:
+      - VITE_API_URL=http://localhost:3001/api/v1
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+    depends_on:
+      - backend
+    command: npm run dev
+
+volumes:
+  postgres_data:
