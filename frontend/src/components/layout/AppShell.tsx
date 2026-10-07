@@ -13,7 +13,7 @@ import BBDWizard from '../views/design/BBDWizard';
 
 export default function AppShell() {
   const [searchParams] = useSearchParams();
-  const { openProject, newProject, saveProject, project, isModified, setActiveDesignId, openProject: reloadProject } = useProject();
+  const { openProject, newProject, saveProject, project, isModified, setActiveDesignId, setActiveTab, openProject: reloadProject } = useProject();
 
   const [dialogState, setDialogState] = useState<{
     open: boolean;
@@ -86,9 +86,16 @@ export default function AppShell() {
         setActiveDesignId(null);
       }
     };
+    const handleHelpRequest = () => {
+      setActiveTab('Help & Documentation');
+    };
     window.addEventListener('request-close-design', handleCloseRequest);
-    return () => window.removeEventListener('request-close-design', handleCloseRequest);
-  }, [isModified, setActiveDesignId]);
+    window.addEventListener('request-help', handleHelpRequest);
+    return () => {
+      window.removeEventListener('request-close-design', handleCloseRequest);
+      window.removeEventListener('request-help', handleHelpRequest);
+    };
+  }, [isModified, setActiveDesignId, setActiveTab]);
 
   const closeDialog = () => setDialogState({ ...dialogState, open: false });
 

@@ -5,7 +5,10 @@ import FitSummary from './FitSummary';
 import { ModelTab } from './ModelTab';
 import { ANOVA } from './ANOVA';
 import { DiagnosticsTab } from './DiagnosticsTab';
+import { ModelGraphsWorkspace } from './ModelGraphsWorkspace';
 import { AnalysisErrorBoundary } from './AnalysisErrorBoundary';
+
+// HMR trigger
 
 export function AnalysisWorkspace({ defaultTab = 'Configure' }: { defaultTab?: string }) {
   const { project, activeDesignId, activeResponseId, setActiveResponseId } = useProject();
@@ -51,7 +54,7 @@ export function AnalysisWorkspace({ defaultTab = 'Configure' }: { defaultTab?: s
             <select
               value={activeResponseId || ''}
               onChange={(e) => setActiveResponseId(e.target.value)}
-              className="border border-[#C0C0C0] rounded-sm px-1.5 py-0.5 bg-white font-medium text-gray-800 shadow-sm focus:outline-none"
+              className="border border-[#C0C0C0] rounded-sm px-1.5 py-0.5 bg-white font-medium text-gray-800 shadow-sm focus:outline-none focus:border-[#0055A4] focus:ring-1 focus:ring-[#0055A4] transition-colors"
             >
               {responses.map((r: any) => (
                 <option key={r.id} value={r.id}>
@@ -83,13 +86,12 @@ export function AnalysisWorkspace({ defaultTab = 'Configure' }: { defaultTab?: s
           let disabled = false;
           let label = tab;
           
-          if (tab === 'Model Graphs') disabled = true;
           if (tab === 'Fit Summary' || tab === 'ANOVA') {
             disabled = !hasFittedAnalysis;
           }
-          if (tab === 'Diagnostics') {
+          if (tab === 'Diagnostics' || tab === 'Model Graphs') {
             disabled = !hasFittedAnalysis || isStale;
-            if (disabled) label = 'Diagnostics 🔒';
+            if (disabled) label = `${tab} 🔒`;
           }
 
           const isActive = internalTab === tab;
@@ -145,8 +147,30 @@ export function AnalysisWorkspace({ defaultTab = 'Configure' }: { defaultTab?: s
                 <div className="text-4xl mb-4">🔒</div>
                 <h2 className="text-lg font-semibold mb-2">Analysis Required</h2>
                 <p className="text-sm max-w-md">
-                  Diagnostics cannot be generated until a successful model is fitted. 
-                  {isStale ? ' The current analysis is stale.' : ' Please run the Analysis workflow first.'}
+                  {isStale ? 'Analysis is out of date. Refit the model to update diagnostics.' : 'Run Start Analysis before viewing diagnostics.'}
+                </p>
+                <button 
+                  onClick={() => setInternalTab('Configure')}
+                  className="mt-6 px-4 py-2 bg-[#0055A4] text-white hover:bg-[#003366] font-medium text-sm shadow-sm"
+                >
+                  {isStale ? 'Refit Analysis' : 'Go to Configure'}
+                </button>
+              </div>
+            )
+          )}
+          {internalTab === 'Model Graphs' && (
+            hasFittedAnalysis && !isStale ? (
+              <ModelGraphsWorkspace 
+                analysis={analysis!} 
+                design={design} 
+                responseName={currentResponse?.name || 'Response'} 
+              />
+            ) : (
+              <div className="p-12 text-center text-gray-500 flex flex-col items-center">
+                <div className="text-4xl mb-4">🔒</div>
+                <h2 className="text-lg font-semibold mb-2">Analysis Required</h2>
+                <p className="text-sm max-w-md">
+                  {isStale ? 'Analysis is out of date. Refit the model before viewing Model Graphs.' : 'Run Start Analysis to generate model graphs.'}
                 </p>
                 <button 
                   onClick={() => setInternalTab('Configure')}

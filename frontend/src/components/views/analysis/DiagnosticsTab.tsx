@@ -1,219 +1,241 @@
 import { useState, useMemo } from 'react';
 import { RSMAnalysis, ObservationDiagnostic } from '../../../lib/statistics/rsm/types';
 import { ScatterPlot, Point } from '../../shared/ScatterPlot';
-import { inverseNormalCDF } from '../../../lib/statistics/rsm/diagnostics';
 
 interface DiagnosticsTabProps {
   analysis: RSMAnalysis;
   responseName: string;
 }
 
-type DiagView = 'normal' | 'residual-predicted' | 'predicted-actual';
+type DiagView = 'residual-predicted' | 'predicted-actual';
+
+function interpolateColor(val: number, min: number, max: number) {
+  if (max === min) return '#0055A4';
+  const pct = Math.max(0, Math.min(1, (val - min) / (max - min)));
+  
+  const colors = [
+    { pct: 0, r: 0, g: 85, b: 164 },       // Blue
+    { pct: 0.5, r: 153, g: 204, b: 51 },   // Green/Yellow
+    { pct: 1, r: 179, g: 0, b: 0 }         // Red
+  ];
+  
+  let i = 0;
+  while (i < colors.length - 1 && pct >= colors[i+1].pct) {
+    i++;
+  }
+  if (i === colors.length - 1) i--;
+  
+  const c1 = colors[i];
+  const c2 = colors[i+1];
+  const range = c2.pct - c1.pct;
+  const t = (pct - c1.pct) / range;
+  
+  const r = Math.round(c1.r + t * (c2.r - c1.r));
+  const g = Math.round(c1.g + t * (c2.g - c1.g));
+  const b = Math.round(c1.b + t * (c2.b - c1.b));
+  
+  return `rgb(${r},${g},${b})`;
+}
 
 export function DiagnosticsTab({ analysis, responseName }: DiagnosticsTabProps) {
-  const [view, setView] = useState<DiagView>('normal');
+  const [view, setView] = useState<DiagView>('residual-predicted');
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 
   const diagnostics = analysis?.diagnostics || [];
   const fittedModel = analysis?.fittedModel || analysis?.fitted;
 
+  // 9. MATHEMATICAL VALIDATION
+  const isDataValid = useMemo(() => {
+    if (!fittedModel || !diagnostics || diagnostics.length === 0) return false;
+    
+    // Check if lengths match
+    if (diagnostics.length !== fittedModel.n) return false;
+
+    // Check if Residual = Actual - Predicted and values are finite
+    for (const d of diagnostics) {
+      if (!Number.isFinite(d.observed) || !Number.isFinite(d.predicted) || !Number.isFinite(d.residual)) {
+        return false;
+      }
+      const calculatedResidual = d.observed - d.predicted;
+      // Allow small floating point difference
+      if (Math.abs(calculatedResidual - d.residual) > 1e-5) {
+        return false;
+      }
+    }
+    return true;
+  }, [diagnostics, fittedModel]);
+
   if (!analysis || !fittedModel || diagnostics.length === 0) {
     return (
-      <div className="max-w-xl p-8 bg-white border border-[#C0C0C0] shadow-sm text-center my-6 mx-auto font-sans">
-        <h2 className="text-base font-bold text-[#003366] mb-2">Diagnostics</h2>
-        <p className="text-gray-600 text-sm mb-1">No diagnostic data is available.</p>
-        <p className="text-gray-500 text-xs">Run Start Analysis to generate the diagnostics.</p>
+      <div className="flex-1 flex items-center justify-center p-8 bg-[#FAFAFA] font-sans">
+        <div className="bg-white border border-[#C0C0C0] shadow-sm p-6 text-center max-w-md">
+          <h2 className="text-[13px] font-bold text-[#003366] mb-2">Diagnostics Unavailable</h2>
+          <p className="text-gray-700 text-[12px]">Run Start Analysis before viewing diagnostics.</p>
+        </div>
       </div>
     );
   }
 
-  // Prepare Normal Probability Data
-  const normalData = useMemo(() => {
-    const sorted = [...diagnostics].sort((a, b) => a.residual - b.residual);
-    const n = sorted.length;
-    return sorted.map((d: any, i: number) => {
-      const p = (i + 0.5) / n;
-      const z = inverseNormalCDF(p);
-      return {
-        id: d.runId || `${d.standardOrder}-${d.runOrder}`,
-        x: z,
-        y: d.residual,
-        data: d
-      };
-    });
-  }, [diagnostics]);
+  if (!isDataValid) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-8 bg-[#FAFAFA] font-sans">
+        <div className="bg-white border border-[#B30000] shadow-sm p-6 text-center max-w-md">
+          <h2 className="text-[13px] font-bold text-[#B30000] mb-2">Validation Error</h2>
+          <p className="text-gray-700 text-[12px]">Diagnostics unavailable: the fitted analysis contains invalid or incomplete observation data.</p>
+        </div>
+      </div>
+    );
+  }
 
-  // Calculate regression line for normal plot
-  const normalRefLine = useMemo(() => {
-    if (normalData.length === 0) return undefined;
-    const n = normalData.length;
-    const sumX = normalData.reduce((acc, d) => acc + d.x, 0);
-    const sumY = normalData.reduce((acc, d) => acc + d.y, 0);
-    const sumXY = normalData.reduce((acc, d) => acc + d.x * d.y, 0);
-    const sumX2 = normalData.reduce((acc, d) => acc + d.x * d.x, 0);
-    
-    const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
-    const intercept = (sumY - slope * sumX) / n;
-    
-    return { type: 'regression' as const, slope, intercept };
-  }, [normalData]);
+  // 5. COLOR BY RESPONSE
+  const observedValues = diagnostics.map(d => d.observed);
+  const minObserved = Math.min(...observedValues);
+  const maxObserved = Math.max(...observedValues);
 
   const resVsPredData = useMemo(() => {
     return diagnostics.map((d: any) => ({
       id: d.runId || `${d.standardOrder}-${d.runOrder}`,
       x: d.predicted,
       y: d.residual,
+      color: interpolateColor(d.observed, minObserved, maxObserved),
       data: d
     }));
-  }, [diagnostics]);
+  }, [diagnostics, minObserved, maxObserved]);
 
   const predVsActualData = useMemo(() => {
     return diagnostics.map((d: any) => ({
       id: d.runId || `${d.standardOrder}-${d.runOrder}`,
       x: d.observed,
       y: d.predicted,
+      color: interpolateColor(d.observed, minObserved, maxObserved),
       data: d
     }));
-  }, [diagnostics]);
+  }, [diagnostics, minObserved, maxObserved]);
 
+  // 6. POINT LABELS / TOOLTIP
   const renderTooltip = (point: Point) => {
     const d = point.data as ObservationDiagnostic;
     return (
-      <div className="flex flex-col gap-0.5 w-32 font-sans text-[11px]">
+      <div className="flex flex-col gap-0.5 w-32 font-sans text-[11px] select-none">
         <div className="font-bold border-b border-[#C0C0C0] pb-1 mb-1 text-[#003366]">
           Std: {d.standardOrder} | Run: {d.runOrder}
         </div>
-        <div className="flex justify-between"><span>Observed:</span><span className="font-mono">{d.observed.toFixed(3)}</span></div>
-        <div className="flex justify-between"><span>Predicted:</span><span className="font-mono">{d.predicted.toFixed(3)}</span></div>
-        <div className="flex justify-between font-bold text-[#B30000] mt-1"><span>Residual:</span><span className="font-mono">{d.residual.toFixed(3)}</span></div>
+        <div className="flex justify-between"><span>Actual:</span><span className="font-mono">{d.observed.toFixed(4)}</span></div>
+        <div className="flex justify-between"><span>Predicted:</span><span className="font-mono">{d.predicted.toFixed(4)}</span></div>
+        <div className="flex justify-between font-bold text-[#B30000] mt-1"><span>Residual:</span><span className="font-mono">{d.residual.toFixed(4)}</span></div>
       </div>
     );
   };
 
-  const activeTabClass = "px-4 py-1.5 text-[11px] font-bold border-b-2 border-[#0055A4] text-[#003366] bg-white";
-  const inactiveTabClass = "px-4 py-1.5 text-[11px] font-medium border-b-2 border-transparent text-gray-700 hover:text-gray-900 hover:bg-[#F5F5F5] transition-colors";
+  const activeTabClass = "px-4 py-1.5 text-[11px] font-bold border-t-2 border-t-[#0055A4] border-b-2 border-b-[#FAFAFA] text-[#003366] bg-[#FAFAFA] relative top-[1px]";
+  const inactiveTabClass = "px-4 py-1.5 text-[11px] font-medium border-t-2 border-transparent border-b-2 border-b-[#C0C0C0] text-gray-700 hover:text-gray-900 hover:bg-[#F5F5F5] transition-colors";
 
   return (
     <div className="flex flex-col h-full bg-[#FAFAFA] font-sans">
       
-      <div className="p-2 border-b border-[#D0D0D0] bg-[#EAEAEA] flex gap-6 text-[11px] shadow-sm">
-        <div><span className="text-gray-600 font-semibold">Response:</span> <span className="font-bold text-[#003366]">{responseName}</span></div>
-        <div><span className="text-gray-600 font-semibold">Model:</span> <span className="font-bold text-[#003366]">{fittedModel.modelType}</span></div>
-        <div><span className="text-gray-600 font-semibold">N:</span> <span className="font-mono">{fittedModel.n}</span></div>
-        <div><span className="text-gray-600 font-semibold">RMSE:</span> <span className="font-mono">{fittedModel.rmse?.toFixed(4) || 'N/A'}</span></div>
-        <div><span className="text-gray-600 font-semibold">R²:</span> <span className="font-mono">{fittedModel.R2 ? (fittedModel.R2 * 100).toFixed(2) + '%' : 'N/A'}</span></div>
-      </div>
-
-      <div className="flex border-b border-[#C0C0C0] bg-[#EAEAEA] select-none">
-        <button
-          className={view === 'normal' ? activeTabClass : inactiveTabClass}
-          onClick={() => setView('normal')}
-        >
-          Normal Probability
-        </button>
+      <div className="flex border-b border-[#C0C0C0] bg-[#EAEAEA] select-none z-10 px-2 pt-1">
         <button
           className={view === 'residual-predicted' ? activeTabClass : inactiveTabClass}
           onClick={() => setView('residual-predicted')}
         >
-          Residuals vs Predicted
+          Resid. vs. Pred.
         </button>
         <button
           className={view === 'predicted-actual' ? activeTabClass : inactiveTabClass}
           onClick={() => setView('predicted-actual')}
         >
-          Predicted vs Actual
+          Pred. vs. Actual
         </button>
       </div>
 
       <div className="flex-1 flex overflow-hidden p-4 gap-4">
         
-        <div className="flex-1 flex flex-col bg-white border border-[#909090] shadow-sm">
-          {view === 'normal' && (
-            <div className="flex-1 flex flex-col p-2">
-              <div className="flex-1 min-h-[300px]">
-                <ScatterPlot 
-                  data={normalData} 
-                  xLabel="Theoretical Normal Quantile" 
-                  yLabel="Residual" 
-                  title={`Normal Probability Plot of Residuals — ${responseName}`}
-                  referenceLine={normalRefLine}
-                  renderTooltip={renderTooltip}
+        {/* Left Side: Diagnostics Plot & Legend */}
+        <div className="flex-1 flex flex-col bg-white border border-[#909090] shadow-sm min-w-0">
+          
+          {/* Legend */}
+          <div className="bg-[#EFEFEF] border-b border-[#C0C0C0] px-4 py-2 flex items-center justify-between text-[11px] shrink-0">
+            <div className="flex items-center gap-4">
+              <span className="font-bold text-[#003366]">Response:</span>
+              <span className="font-medium text-gray-800">{responseName}</span>
+              
+              <div className="flex items-center gap-2 ml-4">
+                <span className="text-gray-600 tabular-nums">{minObserved.toFixed(2)}</span>
+                <div 
+                  className="w-32 h-3 border border-gray-400"
+                  style={{
+                    background: 'linear-gradient(to right, rgb(0,85,164), rgb(153,204,51), rgb(179,0,0))'
+                  }}
                 />
-              </div>
-              <div className="mt-2 p-2 bg-[#E5F3FF] text-[#003366] text-[11px] border border-[#B3D9FF] shadow-sm">
-                <strong className="mr-1">Interpretation:</strong> The Normal Probability plot is used to assess whether residuals are approximately normally distributed. Points should roughly follow the straight reference line.
+                <span className="text-gray-600 tabular-nums">{maxObserved.toFixed(2)}</span>
               </div>
             </div>
-          )}
+          </div>
 
-          {view === 'residual-predicted' && (
-            <div className="flex-1 flex flex-col p-2">
-              <div className="flex-1 min-h-[300px]">
-                <ScatterPlot 
-                  data={resVsPredData} 
-                  xLabel={`Predicted ${responseName}`}
-                  yLabel="Residual" 
-                  title={`Residuals vs Predicted — ${responseName}`}
-                  referenceLine={{ type: 'horizontal', value: 0 }}
-                  renderTooltip={renderTooltip}
-                />
-              </div>
-              <div className="mt-2 p-2 bg-[#E5F3FF] text-[#003366] text-[11px] border border-[#B3D9FF] shadow-sm">
-                <strong className="mr-1">Interpretation:</strong> Residual patterns can indicate non-linearity, non-constant variance, or unusual observations. Random scatter around the zero line is generally desirable.
-              </div>
-            </div>
-          )}
+          {/* Plot Area */}
+          <div className="flex-1 flex flex-col p-4 overflow-auto min-h-0 items-center justify-center">
+            {view === 'residual-predicted' && (
+              <ScatterPlot 
+                data={resVsPredData} 
+                xLabel={`Predicted`}
+                yLabel="Residual" 
+                title={`Residuals vs Predicted — ${responseName}`}
+                referenceLine={{ type: 'horizontal', value: 0 }}
+                renderTooltip={renderTooltip}
+              />
+            )}
 
-          {view === 'predicted-actual' && (
-            <div className="flex-1 flex flex-col p-2">
-              <div className="flex-1 min-h-[300px]">
-                <ScatterPlot 
-                  data={predVsActualData} 
-                  xLabel={`Actual ${responseName}`}
-                  yLabel={`Predicted ${responseName}`}
-                  title={`Predicted vs Actual — ${responseName}`}
-                  referenceLine={{ type: 'identity' }}
-                  renderTooltip={renderTooltip}
-                />
-              </div>
-              <div className="mt-2 p-2 bg-[#E5F3FF] text-[#003366] text-[11px] border border-[#B3D9FF] shadow-sm">
-                <strong className="mr-1">Interpretation:</strong> Points closer to the identity line indicate closer agreement between predicted and observed experimental values.
-              </div>
-            </div>
-          )}
+            {view === 'predicted-actual' && (
+              <ScatterPlot 
+                data={predVsActualData} 
+                xLabel={`Actual`}
+                yLabel={`Predicted`}
+                title={`Predicted vs Actual — ${responseName}`}
+                referenceLine={{ type: 'identity' }}
+                renderTooltip={renderTooltip}
+              />
+            )}
+          </div>
         </div>
 
+        {/* Right Side: Observation Diagnostics Table */}
         <div className="w-80 flex flex-col border border-[#909090] bg-white shadow-sm overflow-hidden shrink-0">
-          <div className="bg-[#003366] px-3 py-1 text-[11px] font-bold text-white">
-            Observation Diagnostics
+          <div className="bg-[#003366] px-3 py-1.5 text-[11px] font-bold text-white flex justify-between items-center shrink-0">
+            <span>Observation Diagnostics</span>
+            <span className="font-normal opacity-80 text-[10px]">n = {fittedModel.n}</span>
           </div>
           <div className="flex-1 overflow-auto">
             <table className="min-w-full text-[11px] text-left divide-y divide-[#C0C0C0]">
-              <thead className="bg-[#EFEFEF] sticky top-0 z-10 shadow-sm border-b border-[#C0C0C0]">
+              <thead className="bg-[#003366] sticky top-0 z-10 shadow-sm border-b border-[#002244]">
                 <tr>
-                  <th className="px-2 py-1.5 text-gray-800 font-semibold w-12">Std</th>
-                  <th className="px-2 py-1.5 text-right text-gray-800 font-semibold">Obs</th>
-                  <th className="px-2 py-1.5 text-right text-gray-800 font-semibold">Pred</th>
-                  <th className="px-2 py-1.5 text-right text-gray-800 font-semibold">Res</th>
+                  <th className="px-2 py-1.5 text-white font-semibold w-12 text-center">Run</th>
+                  <th className="px-2 py-1.5 text-right text-white font-semibold">Actual</th>
+                  <th className="px-2 py-1.5 text-right text-white font-semibold">Predicted</th>
+                  <th className="px-2 py-1.5 text-right text-white font-semibold">Residual</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#EAEAEA]">
-                {diagnostics.map((d: any, i: number) => (
-                  <tr 
-                    key={i} 
-                    className={`hover:bg-[#F0F8FF] cursor-pointer ${selectedRunId === d.runId ? 'bg-[#CCE8FF] font-medium' : ''}`}
-                    onClick={() => setSelectedRunId(d.runId)}
-                  >
-                    <td className="px-2 py-1 text-gray-900">{d.standardOrder}</td>
-                    <td className="px-2 py-1 text-right font-mono text-gray-700">{d.observed.toFixed(2)}</td>
-                    <td className="px-2 py-1 text-right font-mono text-gray-700">{d.predicted.toFixed(2)}</td>
-                    <td className="px-2 py-1 text-right font-mono">
-                      <span className={d.residual > 0 ? 'text-[#0055A4]' : 'text-[#B30000]'}>
-                        {d.residual > 0 ? '+' : ''}{d.residual.toFixed(2)}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                {diagnostics.map((d: any, i: number) => {
+                  const isZero = Math.abs(d.residual) < 1e-4;
+                  const resColor = isZero ? 'text-gray-800' : (d.residual > 0 ? 'text-[#008080]' : 'text-[#D9534F]');
+                  const resSign = isZero ? '' : (d.residual > 0 ? '+' : '');
+                  return (
+                    <tr 
+                      key={i} 
+                      className={`hover:bg-[#F0F8FF] cursor-pointer even:bg-[#F9F9F9] ${selectedRunId === d.runId ? 'bg-[#CCE8FF] font-medium even:bg-[#CCE8FF]' : ''}`}
+                      onClick={() => setSelectedRunId(d.runId)}
+                    >
+                      <td className="px-2 py-1 text-gray-900 text-center">{d.runOrder}</td>
+                      <td className="px-2 py-1 text-right font-mono text-gray-700">{d.observed.toFixed(3)}</td>
+                      <td className="px-2 py-1 text-right font-mono text-gray-700">{d.predicted.toFixed(3)}</td>
+                      <td className="px-2 py-1 text-right font-mono">
+                        <span className={resColor}>
+                          {resSign}{d.residual.toFixed(3)}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

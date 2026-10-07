@@ -5,6 +5,7 @@ import DesignTable from '../views/DesignTable';
 import { AnalysisWorkspace } from '../views/analysis/AnalysisWorkspace';
 import NotesWorkspace from '../views/NotesWorkspace';
 import SummaryWorkspace from '../views/SummaryWorkspace';
+import HelpWorkspace from '../views/HelpWorkspace';
 
 export default function Workspace() {
   const { activeTab, setActiveTab } = useProject();
@@ -53,6 +54,10 @@ export default function Workspace() {
 
     if (activeTab === 'Summary' || activeTab === 'Design Overview') {
       return <SummaryWorkspace />;
+    }
+
+    if (activeTab === 'Help & Documentation') {
+      return <HelpWorkspace />;
     }
 
     return (

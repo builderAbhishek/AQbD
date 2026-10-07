@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { useProject } from '../../context/ProjectContext';
 import { projectsApi } from '../../api/client';
+import { Maximize, Minimize } from 'lucide-react';
 
 type MenuState = string | null;
 
 export default function MenuBar() {
   const [activeMenu, setActiveMenu] = useState<MenuState>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const { newProject, saveProject, project, activeDesignId } = useProject();
 
@@ -16,8 +18,29 @@ export default function MenuBar() {
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
   }, []);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch((err) => {
+        console.error(`Error attempting to enable full-screen mode: ${err.message}`);
+      });
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+    }
+  };
 
   const toggleMenu = (menuName: string) => {
     if (activeMenu === menuName) setActiveMenu(null);
@@ -51,14 +74,43 @@ export default function MenuBar() {
     );
   };
 
+  const SubMenu = ({ children, isOpen, onMouseEnter, onMouseLeave }: any) => {
+    const submenuRef = useRef<HTMLDivElement>(null);
+    const [positionClass, setPositionClass] = useState('left-full');
+
+    useEffect(() => {
+      if (isOpen && submenuRef.current) {
+        const rect = submenuRef.current.getBoundingClientRect();
+        if (rect.right > window.innerWidth) {
+          setPositionClass('right-full');
+        } else {
+          setPositionClass('left-full');
+        }
+      }
+    }, [isOpen]);
+
+    if (!isOpen) return null;
+
+    return (
+      <div 
+        ref={submenuRef}
+        className={`absolute top-0 ${positionClass} -mt-1 bg-white border border-gray-400 shadow-lg py-1 min-w-[200px] z-50`}
+        onMouseEnter={onMouseEnter}
+        onMouseLeave={onMouseLeave}
+      >
+        {children}
+      </div>
+    );
+  };
+
   const hasProject = project && !project.id.startsWith('temp-');
 
   // State for nested menus
   const [activeSubMenu, setActiveSubMenu] = useState<string | null>(null);
 
   return (
-    <div className="bg-[#FAFAFA] flex items-center h-7 px-2 border-b border-[#D0D0D0] text-xs shadow-sm" ref={menuRef}>
-      <div className="flex space-x-1">
+    <div className="bg-[#FAFAFA] flex items-center h-7 px-2 border-b border-[#D0D0D0] text-xs shadow-sm relative z-50" ref={menuRef}>
+      <div className="flex space-x-1 z-10">
         {/* File Menu */}
         <div className="relative">
           <button 
@@ -173,26 +225,24 @@ export default function MenuBar() {
               >
                 <MenuItem label="Response Surface" hasChildren />
                 
-                {(activeSubMenu === 'rs' || activeSubMenu === 'rs-rand') && (
-                  <div className="absolute top-0 left-full -mt-1 bg-white border border-gray-400 shadow-lg py-1 min-w-[200px] z-50">
-                    <div 
-                      className="relative group"
+                <SubMenu isOpen={activeSubMenu === 'rs' || activeSubMenu === 'rs-rand'}>
+                  <div 
+                    className="relative group"
+                    onMouseEnter={() => setActiveSubMenu('rs-rand')}
+                    onMouseLeave={() => setActiveSubMenu('rs')}
+                  >
+                    <MenuItem label="Randomized" hasChildren />
+                    
+                    <SubMenu 
+                      isOpen={activeSubMenu === 'rs-rand'}
                       onMouseEnter={() => setActiveSubMenu('rs-rand')}
                       onMouseLeave={() => setActiveSubMenu('rs')}
                     >
-                      <MenuItem label="Randomized" hasChildren />
-                      
-                      {activeSubMenu === 'rs-rand' && (
-                        <div className="absolute top-0 left-full -mt-1 bg-white border border-gray-400 shadow-lg py-1 min-w-[200px] z-50"
-                             onMouseEnter={() => setActiveSubMenu('rs-rand')}
-                             onMouseLeave={() => setActiveSubMenu('rs')}>
-                          <MenuItem label="Central Composite" onClick={() => window.dispatchEvent(new CustomEvent('request-ccd-wizard'))} />
-                          <MenuItem label="Box-Behnken" onClick={() => window.dispatchEvent(new CustomEvent('request-bbd-wizard'))} />
-                        </div>
-                      )}
-                    </div>
+                      <MenuItem label="Central Composite" onClick={() => window.dispatchEvent(new CustomEvent('request-ccd-wizard'))} />
+                      <MenuItem label="Box-Behnken" onClick={() => window.dispatchEvent(new CustomEvent('request-bbd-wizard'))} />
+                    </SubMenu>
                   </div>
-                )}
+                </SubMenu>
               </div>
               
               <MenuItem label="Split-Plot" disabled />
@@ -232,13 +282,30 @@ export default function MenuBar() {
           </button>
           {activeMenu === 'Help' && (
             <div className="absolute top-full left-0 mt-0 bg-white border border-gray-400 shadow-lg py-1 min-w-[200px] z-50">
-              <MenuItem label="Documentation" disabled />
+              <MenuItem label="Documentation" onClick={() => window.dispatchEvent(new CustomEvent('request-help'))} />
               <MenuItem separator />
               <MenuItem label="About AQbD Studio" disabled />
             </div>
           )}
         </div>
 
+      </div>
+
+      {/* Center Title */}
+      <div className="absolute inset-0 flex justify-center items-center pointer-events-none">
+        <span className="font-bold text-[#003366] text-[13px] tracking-wide">AQbD Studio V1.0</span>
+      </div>
+
+      {/* Right Side Full Screen Button */}
+      <div className="ml-auto flex items-center z-10 pr-2">
+        <button 
+          onClick={toggleFullscreen}
+          className="flex items-center gap-1.5 px-2 py-1 rounded-sm hover:bg-[#E5E5E5] text-gray-700 hover:text-gray-900 transition-colors"
+          title={isFullscreen ? "Exit Full Screen" : "Full Screen"}
+        >
+          {isFullscreen ? <Minimize size={14} /> : <Maximize size={14} />}
+          <span className="font-medium">{isFullscreen ? "Exit Full Screen" : "Full Screen"}</span>
+        </button>
       </div>
     </div>
   );

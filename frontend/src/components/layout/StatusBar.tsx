@@ -26,7 +26,8 @@ export default function StatusBar() {
       <div className="w-64 border-r border-[#D0D0D0] px-2 truncate">Design: {designName}</div>
       <div className="w-24 border-r border-[#D0D0D0] px-2">Runs: {runsCount}</div>
       <div className="w-32 border-r border-[#D0D0D0] px-2">Model: None</div>
-      <div className="w-24 px-2 text-right">{modifiedText}</div>
+      <div className="w-32 border-r border-[#D0D0D0] px-2 text-center">{modifiedText}</div>
+      <div className="w-auto px-4 text-right font-semibold text-gray-500 tracking-wide">Alag Innovative Solutions</div>
     </div>
   );
 }
