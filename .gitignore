@@ -3,5 +3,4 @@ dist
 .env
 *.log
 .DS_Store
-backend/prisma/*.db
-backend/prisma/*.db-journal
+
