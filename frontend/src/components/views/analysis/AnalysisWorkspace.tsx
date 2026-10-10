@@ -91,7 +91,7 @@ export function AnalysisWorkspace({ defaultTab = 'Configure' }: { defaultTab?: s
           }
           if (tab === 'Diagnostics' || tab === 'Model Graphs') {
             disabled = !hasFittedAnalysis || isStale;
-            if (disabled) label = `${tab} 🔒`;
+            if (disabled) label = `${tab} (Locked)`;
           }
 
           const isActive = internalTab === tab;
@@ -144,7 +144,7 @@ export function AnalysisWorkspace({ defaultTab = 'Configure' }: { defaultTab?: s
               />
             ) : (
               <div className="p-12 text-center text-gray-500 flex flex-col items-center">
-                <div className="text-4xl mb-4">🔒</div>
+                <div className="text-4xl mb-4">(Locked)</div>
                 <h2 className="text-lg font-semibold mb-2">Analysis Required</h2>
                 <p className="text-sm max-w-md">
                   {isStale ? 'Analysis is out of date. Refit the model to update diagnostics.' : 'Run Start Analysis before viewing diagnostics.'}
@@ -167,7 +167,7 @@ export function AnalysisWorkspace({ defaultTab = 'Configure' }: { defaultTab?: s
               />
             ) : (
               <div className="p-12 text-center text-gray-500 flex flex-col items-center">
-                <div className="text-4xl mb-4">🔒</div>
+                <div className="text-4xl mb-4">(Locked)</div>
                 <h2 className="text-lg font-semibold mb-2">Analysis Required</h2>
                 <p className="text-sm max-w-md">
                   {isStale ? 'Analysis is out of date. Refit the model before viewing Model Graphs.' : 'Run Start Analysis to generate model graphs.'}
