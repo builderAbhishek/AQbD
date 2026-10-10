@@ -546,7 +546,7 @@ export function ModelGraphsWorkspace({ analysis, design, responseName }: ModelGr
 
   const getInteractionWarning = () => {
     if (!activeFactor || activeGraph === 'Perturbation') return null;
-    const term = fittedModel.terms.find(t => t.type === 'Interaction' && t.factors.includes(activeFactor.id));
+    const term = fittedModel.terms.find(t => t.type === 'interaction' && t.factors.includes(activeFactor.id));
     if (term) {
       const termName = term.factors.map(fId => factors.find(f => f.id === fId)?.name).join('');
       return `Warning: Factor involved in ${termName} interaction.`;
