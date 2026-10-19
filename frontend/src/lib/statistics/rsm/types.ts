@@ -133,4 +133,7 @@ export interface RSMAnalysis {
   diagnostics?: ObservationDiagnostic[];
   modelComparison?: ModelComparisonRow[];
   timestamp: string;
+  isOutdated?: boolean;
+  outdatedReason?: string;
+  dataHash?: string;
 }

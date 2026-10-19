@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { FilePlus, FolderOpen, Upload, Clock, Trash2, MoreVertical, Copy, Archive } from 'lucide-react';
 import { projectsApi, Project } from '../api/client';
 import { formatDistanceToNow } from 'date-fns';
+import { parseAndValidateAqbdFile, generateCopyName } from '../lib/projectIO';
 
 export default function Dashboard() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -77,22 +78,34 @@ export default function Dashboard() {
     const reader = new FileReader();
     reader.onload = async (e) => {
       try {
-        const content = JSON.parse(e.target?.result as string);
+        const content = e.target?.result as string;
+        const validation = parseAndValidateAqbdFile(content);
+        if (!validation.isValid) {
+          alert(`Failed to import project: ${validation.error}`);
+          return;
+        }
+
+        const projectData = validation.projectData!;
+        const existingList = await projectsApi.list();
+        let targetName = projectData.name;
+        if (existingList.some(p => p.name.trim().toLowerCase() === targetName.trim().toLowerCase())) {
+          targetName = generateCopyName(targetName, existingList.map(p => p.name));
+        }
+
         await projectsApi.import({
-          name: content.name || 'Imported Project',
-          data: content.data || content,
+          name: targetName,
+          data: projectData.data,
           status: 'IMPORTED'
         });
         loadProjects();
-      } catch (error) {
-        alert('Invalid project file');
+      } catch (error: any) {
+        alert(`Failed to import project: ${error.message || 'Unknown error'}`);
         console.error(error);
+      } finally {
+        if (event.target) event.target.value = '';
       }
     };
     reader.readAsText(file);
-    
-    // Reset input
-    if (event.target) event.target.value = '';
   };
 
   return (
@@ -128,12 +141,12 @@ export default function Dashboard() {
           <div className="w-12 h-12 bg-green-50 text-green-600 rounded-full flex items-center justify-center mb-4 group-hover:bg-green-100">
             <Upload size={24} />
           </div>
-          <span className="font-medium text-gray-900">Import Data</span>
-          <span className="text-sm text-gray-500 mt-1">Import from JSON</span>
+          <span className="font-medium text-gray-900">Import Project</span>
+          <span className="text-sm text-gray-500 mt-1">Import .aqbd project</span>
         </button>
         <input 
           type="file" 
-          accept=".json" 
+          accept=".aqbd,.json" 
           ref={fileInputRef} 
           className="hidden" 
           onChange={handleFileChange} 

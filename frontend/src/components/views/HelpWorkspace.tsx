@@ -1,5 +1,3 @@
-import React from 'react';
-
 export default function HelpWorkspace() {
   return (
     <div className="flex flex-col h-full bg-white font-sans overflow-hidden">

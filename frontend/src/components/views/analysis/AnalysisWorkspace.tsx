@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useProject } from '../../../context/ProjectContext';
 import { ConfigureAnalysis } from './ConfigureAnalysis';
 import FitSummary from './FitSummary';
@@ -19,7 +19,6 @@ export function AnalysisWorkspace({ defaultTab = 'Configure' }: { defaultTab?: s
   }, [defaultTab]);
 
   const design = activeDesignId && project?.data.designs ? project.data.designs[activeDesignId] : null;
-
   const responses = design?.config.responses || [];
   const currentResponse = responses.find((r: any) => r.id === activeResponseId);
 
@@ -37,6 +36,33 @@ export function AnalysisWorkspace({ defaultTab = 'Configure' }: { defaultTab?: s
     }
     return false;
   }, [design, analysis]);
+
+  const prevResponseIdRef = useRef<string | null>(activeResponseId);
+  const isInitialMount = useRef(true);
+
+  useEffect(() => {
+    if (responses.length > 0 && (!activeResponseId || !responses.some((r: any) => r.id === activeResponseId))) {
+      setActiveResponseId(responses[0].id);
+    }
+  }, [responses, activeResponseId, setActiveResponseId]);
+
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      if (hasFittedAnalysis && defaultTab === 'Configure') {
+        setInternalTab('Model');
+      }
+      return;
+    }
+    if (prevResponseIdRef.current !== activeResponseId) {
+      prevResponseIdRef.current = activeResponseId;
+      if (hasFittedAnalysis) {
+        setInternalTab('Model');
+      } else {
+        setInternalTab('Configure');
+      }
+    }
+  }, [activeResponseId, hasFittedAnalysis, defaultTab]);
 
   if (!design) {
     return <div className="p-4 text-gray-500 text-sm">No design active.</div>;

@@ -134,7 +134,7 @@ export function analyzeModel(
   skipComparison: boolean = false
 ) {
   // 1. Fit the coefficients using QR-based OLS
-  const { coefficients, terms } = fitModel(modelMatrix, y);
+  const { coefficients, terms, qr } = fitModel(modelMatrix, y);
 
   const n = y.length;
   const p = terms.length;
@@ -180,17 +180,35 @@ export function analyzeModel(
     pModel = 1 - jStat.centralF.cdf(fModel, dfModel, dfError);
   }
 
-  // Calculate (X^T X)^-1 and Hat Matrix for PRESS, SE, and Type III Partial SS
-  const Xt = XMat.transpose();
-  const XtX = Xt.mmul(XMat);
+  // Calculate (X^T X)^-1 and leverage values h_ii via QR decomposition
+  // (X^T X)^-1 = (R^T R)^-1 = R^-1 (R^-1)^T avoids condition number squaring
+  // Hat matrix diagonal: h_ii = sum_j Q_ij^2
   let XtX_inv: Matrix;
-  let H_matrix: Matrix | null = null;
+  const leverages: number[] = new Array(n).fill(0);
 
   try {
-    XtX_inv = solve(XtX, Matrix.eye(p));
-    H_matrix = XMat.mmul(XtX_inv).mmul(Xt);
+    if (qr) {
+      const Q = qr.orthogonalMatrix;
+      const R = qr.upperTriangularMatrix;
+      const RInv = solve(R, Matrix.eye(p));
+      XtX_inv = RInv.mmul(RInv.transpose());
+      for (let i = 0; i < n; i++) {
+        let sumSq = 0;
+        for (let j = 0; j < p; j++) {
+          const qVal = Q.get(i, j);
+          sumSq += qVal * qVal;
+        }
+        leverages[i] = sumSq;
+      }
+    } else {
+      const Xt = XMat.transpose();
+      const XtX = Xt.mmul(XMat);
+      XtX_inv = solve(XtX, Matrix.eye(p));
+      const H = XMat.mmul(XtX_inv).mmul(Xt);
+      for (let i = 0; i < n; i++) leverages[i] = H.get(i, i);
+    }
   } catch (err: any) {
-    throw new Error(`Covariance inversion failed. The design matrix might be singular. (${err.message})`);
+    throw new Error(`Covariance inversion failed. The design matrix might be singular or rank-deficient. (${err.message})`);
   }
 
   // Calculate PRESS and Predicted R²
@@ -203,7 +221,7 @@ export function analyzeModel(
     let hasHighLeverage = false;
 
     for (let i = 0; i < n; i++) {
-      const h_ii = H_matrix.get(i, i);
+      const h_ii = leverages[i];
       if (h_ii >= 1 - 1e-6) {
         hasHighLeverage = true;
         break;
@@ -494,7 +512,7 @@ export function analyzeModel(
       observed: y[i],
       predicted: yHat[i],
       residual: y[i] - yHat[i],
-      leverage: H_matrix ? H_matrix.get(i, i) : null
+      leverage: leverages[i] ?? null
     });
   }
 

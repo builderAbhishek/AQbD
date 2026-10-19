@@ -54,7 +54,8 @@ export function fitModel(
 
     return {
       coefficients,
-      terms
+      terms,
+      qr
     };
   } catch (error: any) {
     throw new Error(`Model fitting failed. The model might be singular, aliased, or perfectly collinear. (${error.message})`);

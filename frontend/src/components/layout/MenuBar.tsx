@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useProject } from '../../context/ProjectContext';
 import { projectsApi } from '../../api/client';
+import { downloadAqbdFile } from '../../lib/projectIO';
 import { Maximize, Minimize } from 'lucide-react';
 
 type MenuState = string | null;
@@ -150,13 +151,23 @@ export default function MenuBar() {
               }} />
               <MenuItem label="Delete Project..." disabled={!hasProject} onClick={() => window.dispatchEvent(new CustomEvent('request-delete'))} />
               <MenuItem separator />
-              <MenuItem label="Import..." disabled />
-              <MenuItem label="Export..." disabled={!hasProject} onClick={() => {
-                 if (project && !project.id.startsWith('temp-')) {
-                   const url = projectsApi.exportUrl(project.id);
-                   window.open(url, '_blank');
-                 }
-              }} />
+              <MenuItem 
+                label="Import Project (.aqbd)" 
+                onClick={() => window.dispatchEvent(new CustomEvent('request-import'))} 
+              />
+              <MenuItem 
+                label="Export Project (.aqbd)" 
+                disabled={!project} 
+                onClick={() => {
+                  if (project) {
+                    try {
+                      downloadAqbdFile(project);
+                    } catch (err: any) {
+                      alert(`Failed to export project: ${err.message || 'Unknown error'}`);
+                    }
+                  }
+                }} 
+              />
               <MenuItem separator />
               <MenuItem label="Exit" onClick={() => {}} />
             </div>

@@ -1,0 +1,278 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <title>Weight &mdash; Design-Expert  documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/css/custom.css" type="text/css" />
+
+  
+  
+
+  
+  
+
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../" src="../../_static/documentation_options.js"></script>
+        <script src="../../_static/jquery.js"></script>
+        <script src="../../_static/underscore.js"></script>
+        <script src="../../_static/doctools.js"></script>
+    
+    <script type="text/javascript" src="../../_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="Graphical Optimization" href="../../navigation/graphical-optimization.html" />
+    <link rel="prev" title="Importance" href="importance.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../../index.html" class="icon icon-home"> Design-Expert
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                13
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../whats-new.html">What’s New</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../getting-started/getting-started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/index.html">Tutorials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../designs/index.html">Designs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../design/pre-experiment.html">Pre-Experiment</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../analysis/general-sequence-of-analysis.html">Analysis</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="optimization-overview.html">Optimization</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../navigation/numerical-optimization.html">Numerical Optimization</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="../../navigation/numerical-tips.html">Numerical Optimization Tips</a></li>
+<li class="toctree-l3"><a class="reference internal" href="desirability-details.html">Desirability Details</a></li>
+<li class="toctree-l3"><a class="reference internal" href="desirability-function.html">Desirability Function</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../screen-tips/optimization-node/numerical-optimization-ramps.html">Numerical Optimization Ramps</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../screen-tips/optimization-node/numerical-optimization-report-tip.html">Numerical Optimization Report</a></li>
+<li class="toctree-l3"><a class="reference internal" href="numerical-optimization-algorithm.html">Numerical Optimization Algorithm</a></li>
+<li class="toctree-l3"><a class="reference internal" href="numerical-optimization-criteria.html">Numerical Optimization Criteria</a></li>
+<li class="toctree-l3"><a class="reference internal" href="numerical-optimization-graphs.html">Numerical Optimization Graphs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="numerical-optimization-histograms.html">Numerical Optimization Histograms</a></li>
+<li class="toctree-l3"><a class="reference internal" href="importance.html">Importance</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">Weight</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../navigation/graphical-optimization.html">Graphical Optimization</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../navigation/post-analysis.html">Post Analysis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced-topics/index.html">Advanced Topics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../hints-and-faqs/index.html">Hints and FAQs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../support.html">Support</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../credits.html">Credits</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">Design-Expert</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../index.html" class="icon icon-home"></a> &raquo;</li>
+        
+          <li><a href="optimization-overview.html">Optimization Overview</a> &raquo;</li>
+        
+          <li><a href="../../navigation/numerical-optimization.html">Numerical Optimization</a> &raquo;</li>
+        
+      <li>Weight</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="weight">
+<span id="id1"></span><h1>Weight<a class="headerlink" href="#weight" title="Permalink to this headline">¶</a></h1>
+<p>You can change the shape of the desirability for each goal by the “weight”
+field. Use weights to give added emphasis to the upper/lower bounds, or to
+emphasize the target value. With a weight of 1 the di will vary from 0 to 1 in a
+linear fashion. Weights greater than 1 (maximum weight is 10), give more
+emphasis to the goal. Weights less than 1 (minimum weight is 0.1), give less
+emphasis to the goal. The formulas and outcomes for various options can be seen
+below. These shapes will be displayed by Design-Expert. You can drag
+the curves with your mouse and change their shape.</p>
+<p>For goal of <strong>maximum</strong>, the desirability will be defined by the following formulas:</p>
+<img alt="../../_images/weight-1.png" src="../../_images/weight-1.png" />
+<div class="line-block">
+<div class="line"><br /></div>
+</div>
+<img alt="../../_images/weight-2.png" src="../../_images/weight-2.png" />
+<p>Desirability Curves for Goal is Maximum</p>
+<p>For goal of <strong>minimum</strong>, the desirability will be defined by the following formulas:</p>
+<img alt="../../_images/weight-3.png" src="../../_images/weight-3.png" />
+<div class="line-block">
+<div class="line"><br /></div>
+</div>
+<img alt="../../_images/weight-4.png" src="../../_images/weight-4.png" />
+<p>Desirability Curves for Goal is Minimum</p>
+<p>For goal as a <strong>target</strong>, the desirability will be defined by the following
+formulas:</p>
+<img alt="../../_images/weight-5.png" src="../../_images/weight-5.png" />
+<div class="line-block">
+<div class="line"><br /></div>
+</div>
+<img alt="../../_images/weight-6.png" src="../../_images/weight-6.png" />
+<p>Desirability Curves for Goal is Target</p>
+<p>For goal <strong>within range</strong> (a constraint), desirability will be defined by the
+following formulas:</p>
+<img alt="../../_images/weight-7.png" src="../../_images/weight-7.png" />
+<div class="line-block">
+<div class="line"><br /></div>
+</div>
+<img alt="../../_images/weight-8.png" src="../../_images/weight-8.png" />
+<p>Desirability Curves for Goal as Range</p>
+<p>Within the program, we modify the desirability function by adding a “tail” as
+the function evaluation approaches zero. The tail adjustment is reduced with
+each iteration to drive the function towards its pure value. Otherwise the
+optimization would get stuck on the zero desirability planes.</p>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+        <a href="../../navigation/graphical-optimization.html" class="btn btn-neutral float-right" title="Graphical Optimization" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="importance.html" class="btn btn-neutral float-left" title="Importance" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &#169; Copyright 2021, Stat-Ease, Inc.
+
+    </p>
+  </div> 
+
+</footer>
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

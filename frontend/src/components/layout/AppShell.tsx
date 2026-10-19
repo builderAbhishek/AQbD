@@ -7,9 +7,10 @@ import Workspace from './Workspace';
 import StatusBar from './StatusBar';
 import { useProject } from '../../context/ProjectContext';
 import { projectsApi, Project } from '../../api/client';
-import { FolderOpen, Save, Trash2, X, Edit3 } from 'lucide-react';
+import { FolderOpen, Save, Trash2, X, Edit3, Copy, AlertCircle, CheckCircle2 } from 'lucide-react';
 import CCDWizard from '../views/design/CCDWizard';
 import BBDWizard from '../views/design/BBDWizard';
+import { parseAndValidateAqbdFile, generateCopyName } from '../../lib/projectIO';
 
 export default function AppShell() {
   const [searchParams] = useSearchParams();
@@ -17,19 +18,37 @@ export default function AppShell() {
 
   const [dialogState, setDialogState] = useState<{
     open: boolean;
-    type: 'open' | 'saveAs' | 'delete' | 'rename' | 'ccdWizard' | 'bbdWizard' | 'closeDesign';
+    type: 'open' | 'saveAs' | 'delete' | 'rename' | 'ccdWizard' | 'bbdWizard' | 'closeDesign' | 'importDuplicate' | 'importMessage';
   }>({ open: false, type: 'open' });
 
   const [projectsList, setProjectsList] = useState<Project[]>([]);
   const [saveName, setSaveName] = useState('');
   const [loadingList, setLoadingList] = useState(false);
 
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [pendingImport, setPendingImport] = useState<{
+    originalName: string;
+    copyName: string;
+    data: any;
+  } | null>(null);
+
+  const [importMessage, setImportMessage] = useState<{
+    title: string;
+    message: string;
+    isError: boolean;
+  } | null>(null);
+
   useEffect(() => {
     const id = searchParams.get('id');
     if (id && (!project || project.id !== id)) {
       openProject(id);
     } else if (!id && !project) {
-      newProject();
+      const storedId = localStorage.getItem('aqbd_active_project_id');
+      if (storedId && !storedId.startsWith('temp-')) {
+        openProject(storedId);
+      } else {
+        newProject();
+      }
     }
   }, [searchParams, openProject, newProject, project]);
 
@@ -58,7 +77,8 @@ export default function AppShell() {
       'request-rename': () => handleOpenDialog('rename'),
       'request-delete': () => handleOpenDialog('delete'),
       'request-ccd-wizard': () => handleOpenDialog('ccdWizard'),
-      'request-bbd-wizard': () => handleOpenDialog('bbdWizard')
+      'request-bbd-wizard': () => handleOpenDialog('bbdWizard'),
+      'request-import': () => fileInputRef.current?.click(),
     };
 
     window.addEventListener('request-open', listeners['request-open']);
@@ -67,6 +87,7 @@ export default function AppShell() {
     window.addEventListener('request-delete', listeners['request-delete']);
     window.addEventListener('request-ccd-wizard', listeners['request-ccd-wizard']);
     window.addEventListener('request-bbd-wizard', listeners['request-bbd-wizard']);
+    window.addEventListener('request-import', listeners['request-import']);
 
     return () => {
       window.removeEventListener('request-open', listeners['request-open']);
@@ -75,6 +96,7 @@ export default function AppShell() {
       window.removeEventListener('request-delete', listeners['request-delete']);
       window.removeEventListener('request-ccd-wizard', listeners['request-ccd-wizard']);
       window.removeEventListener('request-bbd-wizard', listeners['request-bbd-wizard']);
+      window.removeEventListener('request-import', listeners['request-import']);
     };
   }, [project]);
 
@@ -155,6 +177,106 @@ export default function AppShell() {
         console.error(e);
       }
     }
+  };
+
+  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const content = event.target?.result as string;
+        const validation = parseAndValidateAqbdFile(content);
+
+        if (!validation.isValid) {
+          setImportMessage({
+            title: 'Import Failed',
+            message: validation.error || 'The file could not be imported.',
+            isError: true,
+          });
+          setDialogState({ open: true, type: 'importMessage' });
+          return;
+        }
+
+        const projectData = validation.projectData!;
+        const existingProjects = await projectsApi.list();
+
+        // Check duplicate by name or original ID
+        const isDuplicate = existingProjects.some(
+          p => p.name.trim().toLowerCase() === projectData.name.trim().toLowerCase() ||
+               (projectData.originalId && p.id === projectData.originalId)
+        );
+
+        if (isDuplicate) {
+          const copyName = generateCopyName(
+            projectData.name,
+            existingProjects.map(p => p.name)
+          );
+          setPendingImport({
+            originalName: projectData.name,
+            copyName,
+            data: projectData.data,
+          });
+          setDialogState({ open: true, type: 'importDuplicate' });
+        } else {
+          await performImport(projectData.name, projectData.data);
+        }
+      } catch (err: any) {
+        setImportMessage({
+          title: 'Import Failed',
+          message: err.message || 'An unexpected error occurred during import.',
+          isError: true,
+        });
+        setDialogState({ open: true, type: 'importMessage' });
+      } finally {
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+    };
+
+    reader.onerror = () => {
+      setImportMessage({
+        title: 'Import Error',
+        message: 'Failed to read the selected file.',
+        isError: true,
+      });
+      setDialogState({ open: true, type: 'importMessage' });
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
+    reader.readAsText(file);
+  };
+
+  const performImport = async (name: string, data: any) => {
+    try {
+      const imported = await projectsApi.import({
+        name,
+        data,
+        status: 'IMPORTED',
+      });
+      closeDialog();
+      await openProject(imported.id);
+      setImportMessage({
+        title: 'Import Successful',
+        message: `Project "${imported.name}" has been successfully imported and opened.`,
+        isError: false,
+      });
+      setDialogState({ open: true, type: 'importMessage' });
+    } catch (err: any) {
+      setImportMessage({
+        title: 'Import Failed',
+        message: err.message || 'Failed to save imported project to the server.',
+        isError: true,
+      });
+      setDialogState({ open: true, type: 'importMessage' });
+    }
+  };
+
+  const handleConfirmImportCopy = async () => {
+    if (!pendingImport) return;
+    const { copyName, data } = pendingImport;
+    setPendingImport(null);
+    await performImport(copyName, data);
   };
 
   const handleCloseDesignCancel = () => {
@@ -306,6 +428,69 @@ export default function AppShell() {
 
       {dialogState.open && dialogState.type === 'bbdWizard' && (
         <BBDWizard onClose={closeDialog} />
+      )}
+
+      <input 
+        ref={fileInputRef} 
+        type="file" 
+        accept=".aqbd,application/json" 
+        onChange={handleFileSelected} 
+        style={{ display: 'none' }} 
+      />
+
+      {dialogState.open && dialogState.type === 'importDuplicate' && pendingImport && (
+        <DialogOverlay title="Duplicate Project" icon={Copy}>
+          <div className="p-6 bg-white flex flex-col gap-3">
+            <p className="text-gray-800 text-sm">
+              A project named <span className="font-semibold text-blue-700">"{pendingImport.originalName}"</span> already exists.
+            </p>
+            <p className="text-gray-600 text-xs leading-relaxed">
+              Would you like to import it as a new copy: <span className="font-semibold text-gray-800">"{pendingImport.copyName}"</span>, or cancel?
+            </p>
+          </div>
+          <div className="bg-[#F0F0F0] border-t border-[#D0D0D0] p-3 flex justify-end gap-2">
+            <button 
+              type="button" 
+              onClick={() => {
+                setPendingImport(null);
+                closeDialog();
+              }} 
+              className="px-4 py-1.5 border border-gray-400 rounded-sm bg-[#E0E0E0] hover:bg-[#D0D0D0]"
+            >
+              Cancel
+            </button>
+            <button 
+              type="button" 
+              onClick={handleConfirmImportCopy}
+              className="px-4 py-1.5 border border-blue-600 rounded-sm bg-blue-600 text-white hover:bg-blue-700 font-medium"
+            >
+              Import as Copy
+            </button>
+          </div>
+        </DialogOverlay>
+      )}
+
+      {dialogState.open && dialogState.type === 'importMessage' && importMessage && (
+        <DialogOverlay title={importMessage.title} icon={importMessage.isError ? AlertCircle : CheckCircle2}>
+          <div className="p-6 bg-white flex items-start gap-4">
+            <div className={`mt-0.5 shrink-0 ${importMessage.isError ? 'text-red-500' : 'text-green-600'}`}>
+              {importMessage.isError ? <AlertCircle size={22} /> : <CheckCircle2 size={22} />}
+            </div>
+            <div className="flex-1">
+              <h3 className="font-semibold text-gray-800 text-sm mb-1">{importMessage.title}</h3>
+              <p className="text-gray-600 text-xs leading-relaxed">{importMessage.message}</p>
+            </div>
+          </div>
+          <div className="bg-[#F0F0F0] border-t border-[#D0D0D0] p-3 flex justify-end gap-2">
+            <button 
+              autoFocus 
+              onClick={closeDialog} 
+              className="px-4 py-1.5 border border-gray-400 rounded-sm bg-[#E0E0E0] hover:bg-[#D0D0D0]"
+            >
+              OK
+            </button>
+          </div>
+        </DialogOverlay>
       )}
     </div>
   );

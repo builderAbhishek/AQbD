@@ -4,3 +4,4 @@ export * from './fitModel';
 export * from './statistics';
 export * from './equations';
 export * from './validation';
+export * from './modelFitting';

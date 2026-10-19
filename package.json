@@ -1,0 +1,21 @@
+{
+  "name": "aqbd---v1",
+  "version": "1.0.0",
+  "description": "AQbD Studio is a browser-based scientific Response Surface Methodology (RSM) and statistical analysis application designed with a desktop scientific-software experience.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/builderAbhishek/AQbD.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/builderAbhishek/AQbD/issues"
+  },
+  "homepage": "https://github.com/builderAbhishek/AQbD#readme"
+}

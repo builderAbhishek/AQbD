@@ -1,0 +1,227 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <title>Set Up Plot Axes &mdash; Design-Expert  documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../../_static/css/custom.css" type="text/css" />
+
+  
+  
+
+  
+  
+
+  
+
+  
+  <!--[if lt IE 9]>
+    <script src="../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../" src="../../_static/documentation_options.js"></script>
+        <script src="../../_static/jquery.js"></script>
+        <script src="../../_static/underscore.js"></script>
+        <script src="../../_static/doctools.js"></script>
+    
+    <script type="text/javascript" src="../../_static/js/theme.js"></script>
+
+    
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../../index.html" class="icon icon-home"> Design-Expert
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                13
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../whats-new.html">What’s New</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../getting-started/getting-started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/index.html">Tutorials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../designs/index.html">Designs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../design/pre-experiment.html">Pre-Experiment</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../analysis/general-sequence-of-analysis.html">Analysis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="optimization-overview.html">Optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../navigation/post-analysis.html">Post Analysis</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../advanced-topics/index.html">Advanced Topics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../hints-and-faqs/index.html">Hints and FAQs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../support.html">Support</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../credits.html">Credits</a></li>
+</ul>
+
+            
+          
+        </div>
+        
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">Design-Expert</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../index.html" class="icon icon-home"></a> &raquo;</li>
+        
+      <li>Set Up Plot Axes</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="set-up-plot-axes">
+<span id="id1"></span><h1>Set Up Plot Axes<a class="headerlink" href="#set-up-plot-axes" title="Permalink to this headline">¶</a></h1>
+<p>The contour plot will be displayed in two dimensions. If there are more factors
+than axes, the levels of the other variables must be set to a constant so you
+can identify the appropriate slice of the design space. Consider using the
+Perturbation (or Trace) plot to choose the most significant factors to plot.</p>
+<p>Change the factors used for the axes of the plot by right-clicking on a factor
+on the factors tool that floats over the graph. Use the same tool to set the
+constants for the other dimensions. Familiarity with this control will be
+helpful, as it is used throughout the software to manipulate slices in the
+factor space.</p>
+<p>Another useful option for selecting axes or setting values is the Sheet view on
+the Factors tool palette. Simply click on Sheet and type in the desired levels.</p>
+<p>To make more changes to the graphs, right-click on the graph and choose <strong>Edit
+Preferences</strong>. This provides a broad range of options such as controlling the axes
+tick marks, colorizing, shading, etc.</p>
+<p><strong>User Tip</strong>: If there are any categorical factors, the pull-down menu on the
+Factors tool provides the option of Average. Instead of choosing a specific
+level for the categorical factor, the responses will be averaged over all the
+levels for that factor.</p>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &#169; Copyright 2021, Stat-Ease, Inc.
+
+    </p>
+  </div> 
+
+</footer>
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

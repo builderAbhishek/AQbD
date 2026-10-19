@@ -31,5 +31,6 @@ export const projectsApi = {
   duplicate: (id: string) => apiClient.post<Project>(`/projects/${id}/duplicate`).then(res => res.data),
   archive: (id: string) => apiClient.put<Project>(`/projects/${id}/archive`).then(res => res.data),
   import: (data: any) => apiClient.post<Project>('/projects/import', data).then(res => res.data),
+  optimize: (id: string, designId?: string) => apiClient.post<{ project: Project; result: any }>(`/projects/${id}/optimize`, { designId }).then(res => res.data),
   exportUrl: (id: string) => `${API_URL}/projects/${id}/export`,
 };

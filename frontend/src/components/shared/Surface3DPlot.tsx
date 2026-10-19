@@ -15,7 +15,7 @@ export interface Surface3DPlotProps {
   title: string;
 }
 
-export function Surface3DPlot({ gridData, designPoints, xLabel, yLabel, title }: Surface3DPlotProps) {
+export function Surface3DPlot({ gridData, designPoints, xLabel: _xLabel, yLabel: _yLabel, title }: Surface3DPlotProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
   // Camera state

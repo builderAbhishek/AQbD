@@ -41,7 +41,13 @@ export default function ModelSelection({ analysis, response }: { analysis?: RSMA
         timestamp: new Date().toISOString()
       };
 
-      // Add to project context
+      // Save to design.analyses (authoritative per-design analysis store)
+      if (!design.analyses) {
+        design.analyses = {};
+      }
+      design.analyses[activeResponseId] = newAnalysis;
+
+      // Also mirror to project.data.analysis for backward compatibility
       if (!project.data.analysis) {
         project.data.analysis = {};
       }

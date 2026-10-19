@@ -1,10 +1,89 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useProject } from '../../context/ProjectContext';
 import { DesignRun, CCDConfig } from '../../lib/design/ccd';
+import { exportDesignTableToCsv, downloadCsvFile, sanitizeFileName } from '../../lib/projectIO';
+import { Download } from 'lucide-react';
+
+export const parseResponseValue = (valueStr: string): number | null => {
+  const numValue = valueStr.trim() === '' ? null : parseFloat(valueStr);
+  return isNaN(numValue as any) ? null : numValue;
+};
+
+export const getTargetCell = (
+  direction: 'up' | 'down' | 'left' | 'right',
+  currentRow: number,
+  currentColKey: string,
+  totalRows: number,
+  responseKeys: string[]
+): { row: number; col: string } | null => {
+  const colIdx = responseKeys.indexOf(currentColKey);
+  if (colIdx === -1) return null;
+
+  if (direction === 'down') {
+    if (currentRow + 1 < totalRows) {
+      return { row: currentRow + 1, col: currentColKey };
+    }
+    return { row: currentRow, col: currentColKey };
+  }
+
+  if (direction === 'up') {
+    if (currentRow - 1 >= 0) {
+      return { row: currentRow - 1, col: currentColKey };
+    }
+    return { row: 0, col: currentColKey };
+  }
+
+  if (direction === 'right') {
+    if (colIdx + 1 < responseKeys.length) {
+      return { row: currentRow, col: responseKeys[colIdx + 1] };
+    } else if (currentRow + 1 < totalRows) {
+      return { row: currentRow + 1, col: responseKeys[0] };
+    }
+    return { row: currentRow, col: currentColKey };
+  }
+
+  if (direction === 'left') {
+    if (colIdx - 1 >= 0) {
+      return { row: currentRow, col: responseKeys[colIdx - 1] };
+    } else if (currentRow - 1 >= 0) {
+      return { row: currentRow - 1, col: responseKeys[responseKeys.length - 1] };
+    }
+    return { row: 0, col: currentColKey };
+  }
+
+  return null;
+};
+
+export const shouldNavigate = (
+  key: string,
+  input: { selectionStart: number | null; selectionEnd: number | null; value: string }
+): boolean => {
+  if (key === 'ArrowDown' || key === 'ArrowUp') {
+    return true;
+  }
+
+  const { selectionStart, selectionEnd, value } = input;
+  if (selectionStart === null || selectionEnd === null) return true;
+
+  const isAllSelected = selectionStart === 0 && selectionEnd === value.length;
+
+  if (key === 'ArrowLeft') {
+    return isAllSelected || (selectionStart === 0 && selectionEnd === 0);
+  }
+
+  if (key === 'ArrowRight') {
+    return (
+      (isAllSelected && value.length > 0) ||
+      (selectionStart === value.length && selectionEnd === value.length)
+    );
+  }
+
+  return false;
+};
 
 // Spreadsheet-like Design Table
 export default function DesignTable() {
-  const { project, saveProject, activeDesignId } = useProject();
+  const { project, activeDesignId, updateDesignRunResponse } = useProject();
   
   const design = activeDesignId && project?.data?.designs ? project.data.designs[activeDesignId] : null;
   const config = design?.config as CCDConfig;
@@ -15,6 +94,17 @@ export default function DesignTable() {
   const [editingCell, setEditingCell] = useState<{row: number, col: string} | null>(null);
   const [editValue, setEditValue] = useState('');
 
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const isNavigatingRef = useRef(false);
+
+  useEffect(() => {
+    if (editingCell && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+      isNavigatingRef.current = false;
+    }
+  }, [editingCell?.row, editingCell?.col]);
+
   if (!design || !config || !runs) {
     return (
       <div className="flex flex-col h-full bg-white items-center justify-center text-gray-500">
@@ -24,45 +114,131 @@ export default function DesignTable() {
     );
   }
 
-  const handleEditStart = (rowIndex: number, colKey: string, currentValue: any) => {
-    // Only allow editing responses
-    if (!colKey.startsWith('resp_')) return;
-    setEditingCell({ row: rowIndex, col: colKey });
-    setEditValue(currentValue === null || currentValue === undefined ? '' : String(currentValue));
+  const saveCell = (rowIndex: number, colKey: string, valueStr: string): DesignRun[] => {
+    if (!colKey.startsWith('resp_')) return runs;
+    const respId = colKey.replace('resp_', '');
+    const finalVal = parseResponseValue(valueStr);
+    const targetRun = runs[rowIndex];
+    if (!targetRun) return runs;
+
+    const runId = targetRun.id || rowIndex;
+    return updateDesignRunResponse(activeDesignId, runId, respId, finalVal) as DesignRun[];
   };
 
-  const handleEditSave = () => {
-    if (!editingCell) return;
-    
-    const respId = editingCell.col.replace('resp_', '');
-    const numValue = editValue.trim() === '' ? null : parseFloat(editValue);
-    
-    if (project) {
-      // Create deep copy
-      const newRuns = [...runs];
-      newRuns[editingCell.row] = {
-        ...newRuns[editingCell.row],
-        responses: {
-          ...newRuns[editingCell.row].responses,
-          [respId]: isNaN(numValue as any) ? null : numValue
-        }
-      };
+  const handleExportCsv = () => {
+    if (!design) return;
+    const csvContent = exportDesignTableToCsv(design, viewMode);
+    const fileName = `${sanitizeFileName(design.name || 'Design_Table')}_${viewMode}.csv`;
+    downloadCsvFile(csvContent, fileName);
+  };
 
-      if (activeDesignId) {
-        project.data.designs[activeDesignId].runs = newRuns;
-        project.data.designs[activeDesignId].runsModifiedAt = new Date().toISOString();
-        saveProject(project.name);
+  const handleCellActivate = (
+    rowIndex: number,
+    colKey: string,
+    currentValue: any,
+    isResponse: boolean
+  ) => {
+    setSelectedCell({ row: rowIndex, col: colKey });
+
+    if (!isResponse) {
+      if (editingCell) {
+        saveCell(editingCell.row, editingCell.col, editValue);
+        setEditingCell(null);
       }
+      return;
     }
-    
-    setEditingCell(null);
+
+    if (editingCell?.row === rowIndex && editingCell?.col === colKey) {
+      inputRef.current?.focus();
+      return;
+    }
+
+    if (editingCell) {
+      saveCell(editingCell.row, editingCell.col, editValue);
+    }
+
+    const valStr = currentValue === null || currentValue === undefined ? '' : String(currentValue);
+    isNavigatingRef.current = true;
+    setEditingCell({ row: rowIndex, col: colKey });
+    setEditValue(valStr);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleEditSave();
-    } else if (e.key === 'Escape') {
+  const handleBlur = () => {
+    if (isNavigatingRef.current) {
+      isNavigatingRef.current = false;
+      return;
+    }
+    if (editingCell) {
+      saveCell(editingCell.row, editingCell.col, editValue);
       setEditingCell(null);
+    }
+  };
+
+  const navigateCell = (direction: 'up' | 'down' | 'left' | 'right') => {
+    if (!editingCell) return;
+
+    const responseKeys = config.responses.map(r => `resp_${r.id}`);
+    if (responseKeys.length === 0) return;
+
+    const updatedRuns = saveCell(editingCell.row, editingCell.col, editValue);
+
+    const target = getTargetCell(
+      direction,
+      editingCell.row,
+      editingCell.col,
+      runs.length,
+      responseKeys
+    );
+
+    if (!target) return;
+
+    if (target.row === editingCell.row && target.col === editingCell.col) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+      return;
+    }
+
+    const targetRespId = target.col.replace('resp_', '');
+    const rawVal = updatedRuns[target.row]?.responses?.[targetRespId];
+    const targetValStr = rawVal === null || rawVal === undefined ? '' : String(rawVal);
+
+    isNavigatingRef.current = true;
+    setSelectedCell(target);
+    setEditingCell(target);
+    setEditValue(targetValStr);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Escape') {
+      setEditingCell(null);
+      return;
+    }
+
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      navigateCell(e.shiftKey ? 'up' : 'down');
+      return;
+    }
+
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      navigateCell(e.shiftKey ? 'left' : 'right');
+      return;
+    }
+
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      if (e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
+      const input = e.currentTarget;
+      if (shouldNavigate(e.key, input)) {
+        e.preventDefault();
+        const dirMap: Record<string, 'up' | 'down' | 'left' | 'right'> = {
+          ArrowDown: 'down',
+          ArrowUp: 'up',
+          ArrowLeft: 'left',
+          ArrowRight: 'right',
+        };
+        navigateCell(dirMap[e.key]);
+      }
     }
   };
 
@@ -99,7 +275,18 @@ export default function DesignTable() {
             Coded
           </button>
         </div>
-        <span className="text-gray-500 italic ml-auto">{runs.length} Runs</span>
+        <div className="flex items-center gap-2 ml-auto">
+          <button
+            type="button"
+            onClick={handleExportCsv}
+            className="flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-gray-100 border border-gray-300 rounded-sm font-medium text-gray-700 shadow-2xs transition-colors"
+            title={`Export Design Table (${viewMode} values) to CSV`}
+          >
+            <Download size={13} className="text-blue-600" />
+            <span>Export CSV</span>
+          </button>
+          <span className="text-gray-500 italic">{runs.length} Runs</span>
+        </div>
       </div>
 
       <div className="flex bg-[#EAEAEA] border-b border-[#A0A0A0]">
@@ -147,19 +334,21 @@ export default function DesignTable() {
                   className={`border-r border-[#E0E0E0] px-2 py-1 truncate shrink-0
                     ${isResponse ? 'bg-[#FDFDFD] cursor-text' : 'cursor-default'}
                     ${isSelected && !isEditing ? 'outline outline-2 outline-blue-500 bg-blue-50 z-10' : ''}
+                    ${isEditing ? 'outline outline-2 outline-blue-500 bg-white z-10' : ''}
                   `}
                   style={{ width: col.width }}
-                  onClick={() => setSelectedCell({row: rowIndex, col: col.key})}
-                  onDoubleClick={() => handleEditStart(rowIndex, col.key, displayValue)}
+                  onMouseDown={() => handleCellActivate(rowIndex, col.key, displayValue, isResponse)}
+                  onClick={() => handleCellActivate(rowIndex, col.key, displayValue, isResponse)}
                 >
                   {isEditing ? (
                     <input 
-                      autoFocus
+                      ref={inputRef}
                       type="text" 
-                      className="w-full h-full outline-none text-xs bg-white"
+                      className="w-full h-full outline-none text-xs bg-transparent p-0 m-0 border-none"
                       value={editValue}
                       onChange={e => setEditValue(e.target.value)}
-                      onBlur={handleEditSave}
+                      onMouseDown={e => e.stopPropagation()}
+                      onBlur={handleBlur}
                       onKeyDown={handleKeyDown}
                     />
                   ) : displayValue}

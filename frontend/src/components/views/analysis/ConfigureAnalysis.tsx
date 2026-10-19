@@ -10,7 +10,7 @@ interface ConfigureAnalysisProps {
 }
 
 export function ConfigureAnalysis({ onComplete }: ConfigureAnalysisProps) {
-  const { project, activeDesignId, activeResponseId, setActiveResponseId, saveProject, setModified } = useProject();
+  const { project, activeDesignId, activeResponseId, setActiveResponseId, saveDesignAnalysis } = useProject();
   
   const [isFitting, setIsFitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -77,11 +77,9 @@ export function ConfigureAnalysis({ onComplete }: ConfigureAnalysisProps) {
 
       validateAnalysisResult(fullAnalysis);
 
-      if (!design.analyses) design.analyses = {};
-      design.analyses[activeResponseId] = fullAnalysis;
-
-      setModified(true);
-      if (project) await saveProject(project.name);
+      if (activeDesignId && activeResponseId) {
+        await saveDesignAnalysis(activeDesignId, activeResponseId, fullAnalysis);
+      }
 
       setIsFitting(false);
       onComplete();

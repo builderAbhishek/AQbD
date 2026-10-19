@@ -6,6 +6,11 @@ import { AnalysisWorkspace } from '../views/analysis/AnalysisWorkspace';
 import NotesWorkspace from '../views/NotesWorkspace';
 import SummaryWorkspace from '../views/SummaryWorkspace';
 import HelpWorkspace from '../views/HelpWorkspace';
+import { NumericalOptimizationWorkspace } from '../views/optimization/NumericalOptimizationWorkspace';
+import { GraphicalOptimizationWorkspace } from '../views/optimization/GraphicalOptimizationWorkspace';
+import { PointPredictionWorkspace } from '../views/postAnalysis/PointPredictionWorkspace';
+import { ConfirmationWorkspace } from '../views/postAnalysis/ConfirmationWorkspace';
+import { CoefficientsWorkspace } from '../views/postAnalysis/CoefficientsWorkspace';
 
 export default function Workspace() {
   const { activeTab, setActiveTab } = useProject();
@@ -48,6 +53,10 @@ export default function Workspace() {
       return <AnalysisWorkspace defaultTab="Diagnostics" />;
     }
 
+    if (activeTab === 'Criteria' || activeTab === 'Solutions' || activeTab === 'Graphs' || activeTab === 'Numerical' || activeTab.startsWith('Numerical') || activeTab.startsWith('Optimization Graphs')) {
+      return <NumericalOptimizationWorkspace />;
+    }
+
     if (activeTab === 'Notes') {
       return <NotesWorkspace />;
     }
@@ -58,6 +67,22 @@ export default function Workspace() {
 
     if (activeTab === 'Help & Documentation') {
       return <HelpWorkspace />;
+    }
+
+    if (activeTab === 'Graphical' || activeTab === 'Graphical Optimization' || activeTab.startsWith('Graphical')) {
+      return <GraphicalOptimizationWorkspace />;
+    }
+
+    if (activeTab === 'Prediction' || activeTab === 'Point Prediction' || activeTab.startsWith('Point Prediction')) {
+      return <PointPredictionWorkspace />;
+    }
+
+    if (activeTab === 'Confirmation' || activeTab.startsWith('Confirmation')) {
+      return <ConfirmationWorkspace />;
+    }
+
+    if (activeTab === 'Report' || activeTab === 'Coefficients Table' || activeTab === 'Coefficients' || activeTab.startsWith('Coefficients')) {
+      return <CoefficientsWorkspace />;
     }
 
     return (

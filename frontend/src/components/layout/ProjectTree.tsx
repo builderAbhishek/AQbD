@@ -12,10 +12,21 @@ type TreeNode = {
   icon?: React.ReactNode;
   isDesignInstance?: boolean;
   color?: string; // Optional custom color for folders
+  responseId?: string;
 };
 
 export default function ProjectTree() {
-  const { project, activeNode, setActiveNode, setActiveTab, activeDesignId, setActiveDesignId } = useProject();
+  const { 
+    project, 
+    activeNode, 
+    setActiveNode, 
+    activeTab,
+    setActiveTab, 
+    activeDesignId, 
+    setActiveDesignId,
+    activeResponseId,
+    setActiveResponseId
+  } = useProject();
   
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
     'std_designs': true,
@@ -26,6 +37,7 @@ export default function ProjectTree() {
     'grp_design': true,
     'grp_analysis': true,
     'grp_optimization': true,
+    'Numerical': true,
     'grp_post': true,
   });
 
@@ -156,9 +168,6 @@ export default function ProjectTree() {
         if (responses.length > 0) activeName += ` - ${responses[0].name}`;
       }
       
-      const rName = responses.length > 0 ? responses[0].name : 'R1';
-      const hasAnalysis = Boolean(activeDesign.analyses && activeDesign.analyses[responses[0]?.id]);
-
       projectNode.children = [
         {
           id: 'grp_information',
@@ -198,8 +207,20 @@ export default function ProjectTree() {
           label: 'Analysis',
           isFolder: true,
           color: '#008000',
-          children: [
-            { id: 'Analysis', label: `${rName} ${hasAnalysis ? '(Analyzed)' : '(Empty)'}`.trim() },
+          children: responses.length > 0 ? responses.map((r: any) => {
+            const hasAnalysis = Boolean(
+              activeDesign.analyses && 
+              activeDesign.analyses[r.id] && 
+              (activeDesign.analyses[r.id].fittedModel || activeDesign.analyses[r.id].fitted)
+            );
+            return {
+              id: `Analysis-${r.id}`,
+              responseId: r.id,
+              label: hasAnalysis ? `${r.name} (Analyzed)` : r.name,
+              icon: <FileIcon size={14} className={hasAnalysis ? "text-green-600" : "text-gray-400"} />
+            };
+          }) : [
+            { id: 'Analysis', label: 'No Responses', disabled: true }
           ]
         },
         {
@@ -208,8 +229,17 @@ export default function ProjectTree() {
           isFolder: true,
           color: '#B30000',
           children: [
-            { id: 'Numerical', label: 'Numerical', disabled: true, isFuture: true },
-            { id: 'Graphical', label: 'Graphical', disabled: true, isFuture: true },
+            {
+              id: 'Numerical',
+              label: 'Numerical',
+              isFolder: true,
+              children: [
+                { id: 'Criteria', label: 'Criteria' },
+                { id: 'Solutions', label: 'Solutions' },
+                { id: 'Graphs', label: 'Graphs' }
+              ]
+            },
+            { id: 'Graphical', label: 'Graphical' },
           ]
         },
         {
@@ -218,9 +248,9 @@ export default function ProjectTree() {
           isFolder: true,
           color: '#7A5B00',
           children: [
-            { id: 'Prediction', label: 'Point Prediction', disabled: true, isFuture: true },
-            { id: 'Confirmation', label: 'Confirmation', disabled: true, isFuture: true },
-            { id: 'Report', label: 'Coefficients Table', disabled: true, isFuture: true },
+            { id: 'Point Prediction', label: 'Point Prediction' },
+            { id: 'Confirmation', label: 'Confirmation' },
+            { id: 'Coefficients Table', label: 'Coefficients Table' },
           ]
         }
       ];
@@ -246,11 +276,19 @@ export default function ProjectTree() {
         setActiveNode(node.id);
         setActiveTab(node.id);
       }
+      if (node.id === 'Numerical') {
+        setActiveNode('Criteria');
+        setActiveTab('Criteria');
+      }
     } else {
       if (node.isDesignInstance) {
         setActiveDesignId(node.id);
         setActiveNode('Design Table');
         setActiveTab('Design Table');
+      } else if (node.responseId) {
+        setActiveResponseId(node.responseId);
+        setActiveNode(node.id);
+        setActiveTab('Analysis');
       } else {
         setActiveNode(node.id);
         if (node.id !== 'ccd' && node.id !== 'bbd') {
@@ -285,8 +323,14 @@ export default function ProjectTree() {
             setActiveDesignId(node.id);
             setActiveNode('Design Table');
             setActiveTab('Design Table');
+          } else if (node.responseId) {
+            setActiveResponseId(node.responseId);
+            setActiveNode(node.id);
+            setActiveTab('Analysis');
+          } else {
+            setActiveNode(node.id);
+            setActiveTab(node.id);
           }
-          else setActiveTab(node.id);
         } else {
           toggleExpand(node.id);
         }
@@ -308,6 +352,8 @@ export default function ProjectTree() {
     
     if (node.isDesignInstance) {
       isSelected = activeDesignId === node.id && (activeNode === 'Design Table' || activeNode === node.id);
+    } else if (node.responseId) {
+      isSelected = activeNode === node.id || (activeTab === 'Analysis' && activeResponseId === node.responseId);
     } else {
       isSelected = activeNode === node.id || (activeNode === node.label && !node.isFolder);
     }

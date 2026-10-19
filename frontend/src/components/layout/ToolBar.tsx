@@ -14,7 +14,7 @@ import {
 import { useProject } from '../../context/ProjectContext';
 
 export default function ToolBar() {
-  const { newProject, saveProject, project } = useProject();
+  const { newProject, saveProject, project, activeDesignId, setActiveTab } = useProject();
 
   const ToolBtn = ({ icon: Icon, label, disabled, onClick }: any) => (
     <button 
@@ -56,9 +56,24 @@ export default function ToolBar() {
         
         <ToolBtn icon={Table} label="Design" disabled />
         <ToolBtn icon={BarChart2} label="Analyze" disabled />
-        <ToolBtn icon={PieChart} label="Graphs" disabled />
-        <ToolBtn icon={Settings} label="Optimize" disabled />
-        <ToolBtn icon={FileText} label="Report" disabled />
+        <ToolBtn 
+          icon={PieChart} 
+          label="Graphical Optimization" 
+          disabled={!activeDesignId} 
+          onClick={() => setActiveTab('Graphical')} 
+        />
+        <ToolBtn 
+          icon={Settings} 
+          label="Optimize (Numerical Criteria)" 
+          disabled={!activeDesignId} 
+          onClick={() => setActiveTab('Criteria')} 
+        />
+        <ToolBtn 
+          icon={FileText} 
+          label="Coefficients Table (Post Analysis)" 
+          disabled={!activeDesignId} 
+          onClick={() => setActiveTab('Coefficients Table')} 
+        />
       </div>
     </div>
   );
